@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment secrets
+.env
+.env.*
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Test/cache
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Private user data
+private_storage/
+
+# Logs
+*.log
+
+# Development inventory files
+*_File_Map.txt
+*_Clean_Map.txt
+*_tree.txt
+
+# Python virtual environments
+.venv/
+.venv*/
+venv/
+env/
+backend/.venv*/
