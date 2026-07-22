@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETE,
+    DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
     DISCOVERY_SCAN_STATUS_FAILED,
     DISCOVERY_SCAN_STATUS_PENDING,
     DISCOVERY_SCAN_STATUS_RUNNING,
@@ -19,6 +20,7 @@ from app.models.discovery import (
 from app.models.document import Document
 from app.services.discovery_engine import DiscoveryEngine
 from app.services.discovery_privacy import DiscoveryPrivacyService
+from app.services.document_extraction import EXTRACTION_METHOD_UNSUPPORTED, DocumentExtractionService
 from app.services.document_content_encryption import document_content_encryption_service
 from app.services.document_storage import LocalDocumentStorage
 
@@ -26,10 +28,19 @@ DISCOVERY_STARTED = "discovery_started"
 DISCOVERY_COMPLETED = "discovery_completed"
 DISCOVERY_FAILED = "discovery_failed"
 EVIDENCE_FINDING_CREATED = "evidence_finding_created"
+DISCOVERY_DOCUMENT_FAILED = "discovery_document_failed"
 
 
 class DiscoveryOrchestrationError(RuntimeError):
     pass
+
+
+class DiscoveryScanExecutor:
+    def __init__(self, orchestrator: "DiscoveryOrchestrator") -> None:
+        self.orchestrator = orchestrator
+
+    def process(self, db: Session, *, user_id: str, document_ids: list[str]) -> DiscoveryScan:
+        return self.orchestrator.run_scan(db, user_id=user_id, document_ids=document_ids)
 
 
 class DocumentTextProvider(Protocol):
@@ -38,8 +49,9 @@ class DocumentTextProvider(Protocol):
 
 
 class EncryptedDocumentTextProvider:
-    def __init__(self, storage: LocalDocumentStorage | None = None) -> None:
+    def __init__(self, storage: LocalDocumentStorage | None = None, extraction_service: DocumentExtractionService | None = None) -> None:
         self.storage = storage or LocalDocumentStorage()
+        self.extraction_service = extraction_service or DocumentExtractionService()
 
     def get_text(self, document: Document) -> str:
         encrypted_key_reference = document.encryption_key_reference_encrypted
@@ -48,7 +60,10 @@ class EncryptedDocumentTextProvider:
 
         encrypted_bytes = self.storage.read_encrypted(document.id)
         plaintext = document_content_encryption_service.decrypt(document.id, encrypted_bytes, encrypted_key_reference)
-        return plaintext.decode("utf-8", errors="replace")
+        normalized = self.extraction_service.extract_from_bytes(plaintext, mime_type=document.mime_type)
+        if normalized.extraction_method == EXTRACTION_METHOD_UNSUPPORTED:
+            raise DiscoveryOrchestrationError("Document format extraction is not supported")
+        return normalized.text
 
 
 AuditLogger = Callable[[Session, str, str, str], None]
@@ -88,33 +103,52 @@ class DiscoveryOrchestrator:
             scan.started_at = datetime.now(timezone.utc)
             db.commit()
 
+            document_failures = 0
+            findings_created = 0
             for document in documents:
-                document_text = self.text_provider.get_text(document)
-                candidates = self.discovery_engine.analyze_text(document_text)
-                for candidate in candidates:
-                    privacy_result = self.privacy_service.sanitize_evidence(
-                        matched_terms=candidate.matched_terms,
-                        evidence_excerpt=None,
-                    )
-                    finding = EvidenceFinding(
-                        id=str(uuid.uuid4()),
-                        scan_id=scan.id,
-                        document_id=document.id,
-                        category=candidate.category,
-                        confidence_score=candidate.confidence_score,
-                        review_status=EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
-                    )
-                    finding.set_matched_terms(json.dumps(privacy_result.sanitized_terms))
-                    finding.set_evidence_excerpt(privacy_result.sanitized_excerpt)
-                    db.add(finding)
-                    self._audit(db, user_id, EVIDENCE_FINDING_CREATED, f"Evidence finding created for scan {scan.id}")
-                scan.documents_processed += 1
+                try:
+                    document_text = self.text_provider.get_text(document)
+                    candidates = self.discovery_engine.analyze_text(document_text)
+                    for candidate in candidates:
+                        privacy_result = self.privacy_service.sanitize_evidence(
+                            matched_terms=candidate.matched_terms,
+                            evidence_excerpt=None,
+                        )
+                        finding = EvidenceFinding(
+                            id=str(uuid.uuid4()),
+                            scan_id=scan.id,
+                            document_id=document.id,
+                            category=candidate.category,
+                            confidence_score=candidate.confidence_score,
+                            review_status=EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+                        )
+                        finding.set_matched_terms(json.dumps(privacy_result.sanitized_terms))
+                        finding.set_evidence_excerpt(privacy_result.sanitized_excerpt)
+                        db.add(finding)
+                        findings_created += 1
+                        self._audit(db, user_id, EVIDENCE_FINDING_CREATED, f"Evidence finding created for scan {scan.id}")
+                    scan.documents_processed += 1
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    document_failures += 1
+                    self._audit(db, user_id, DISCOVERY_DOCUMENT_FAILED, f"Document failed during discovery scan {scan.id}")
 
-            scan.status = DISCOVERY_SCAN_STATUS_COMPLETE
+            if document_failures and scan.documents_processed == 0:
+                scan.status = DISCOVERY_SCAN_STATUS_FAILED
+            elif document_failures and findings_created > 0:
+                scan.status = DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
+            elif document_failures:
+                scan.status = DISCOVERY_SCAN_STATUS_FAILED
+            else:
+                scan.status = DISCOVERY_SCAN_STATUS_COMPLETE
             scan.completed_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(scan)
-            self._audit(db, user_id, DISCOVERY_COMPLETED, f"Discovery scan {scan.id} completed")
+            if scan.status == DISCOVERY_SCAN_STATUS_FAILED:
+                self._audit(db, user_id, DISCOVERY_FAILED, f"Discovery scan {scan.id} failed")
+                raise DiscoveryOrchestrationError("Discovery scan failed")
+            self._audit(db, user_id, DISCOVERY_COMPLETED, f"Discovery scan {scan.id} completed with status {scan.status}")
             return scan
         except Exception as exc:
             db.rollback()
