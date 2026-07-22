@@ -5,6 +5,7 @@ from app.api.asset_beneficiaries import router as asset_beneficiaries_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.beneficiaries import router as beneficiaries_router
+from app.api.discovery import router as discovery_router
 from app.api.documents import router as documents_router
 from app.api.health import router as health_router
 from app.config import settings
@@ -33,6 +34,7 @@ app.include_router(assets_router)
 app.include_router(asset_beneficiaries_router)
 app.include_router(beneficiaries_router)
 app.include_router(documents_router)
+app.include_router(discovery_router)
 
 init_db()
 
