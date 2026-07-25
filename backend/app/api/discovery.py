@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.discovery import EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, EVIDENCE_REVIEW_STATUS_VALUES, DiscoveryScan, EvidenceFinding
+from app.models.discovery import EVIDENCE_REVIEW_STATUS_CONFIRMED, EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, EVIDENCE_REVIEW_STATUS_VALUES, DiscoveryScan, EvidenceFinding
+from app.models.discovery_asset_link import DiscoveryFindingAssetLink
+from app.models.asset import Asset
 from app.models.user import User
 from app.schemas.discovery import (
     DiscoveryReportSummaryResponse,
@@ -12,10 +15,13 @@ from app.schemas.discovery import (
     DiscoveryScanSummaryResponse,
     EvidenceFindingResponse,
     EvidenceFindingReviewRequest,
+    ManualAssetConversionRequest,
     PaginatedDiscoveryScanResponse,
     PaginatedEvidenceFindingResponse,
 )
+from app.schemas.assets import AssetCreate, AssetDetailCreate, AssetResponse
 from app.security.auth import get_current_user, get_db
+from app.services.asset_creation import create_asset_record
 from app.services.audit import log_event
 from app.services.discovery_orchestrator import DiscoveryOrchestrationError, DiscoveryOrchestrator
 from app.services.discovery_reports import DiscoveryReportService
@@ -58,6 +64,39 @@ def _finding_response(finding: EvidenceFinding) -> EvidenceFindingResponse:
         created_at=finding.created_at,
     )
 
+
+
+
+
+def _asset_response(asset: Asset) -> AssetResponse:
+    detail = asset.details
+    detail_response = None
+    if detail is not None:
+        from app.schemas.assets import AssetDetailResponse
+
+        detail_response = AssetDetailResponse(
+            account_number=detail.get_decrypted_value("account_number_encrypted"),
+            policy_number=detail.get_decrypted_value("policy_number_encrypted"),
+            notes=detail.get_decrypted_value("notes_encrypted"),
+            claim_instructions=detail.get_decrypted_value("claim_instructions_encrypted"),
+        )
+    return AssetResponse(
+        id=asset.id,
+        asset_category=asset.asset_category,
+        asset_name=asset.asset_name,
+        institution=asset.institution,
+        description=asset.description,
+        estimated_value=asset.estimated_value,
+        ownership_type=asset.ownership_type,
+        status=asset.status,
+        is_verified=asset.is_verified,
+        verification_status=asset.verification_status,
+        verified_at=asset.verified_at,
+        archived_at=asset.archived_at,
+        created_at=asset.created_at,
+        updated_at=asset.updated_at,
+        details=detail_response,
+    )
 
 
 def _review_event_type(old_status: str, new_status: str) -> str:
@@ -234,6 +273,78 @@ def list_discovery_review_queue(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@router.post(
+    "/findings/{finding_id}/assets",
+    response_model=AssetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_asset_from_discovery_finding(
+    finding_id: str,
+    payload: ManualAssetConversionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AssetResponse:
+    finding = _get_owned_finding(db, finding_id, current_user.id)
+    if finding.review_status != EVIDENCE_REVIEW_STATUS_CONFIRMED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only confirmed findings can be used to create an asset",
+        )
+
+    existing_link = db.query(DiscoveryFindingAssetLink).filter(DiscoveryFindingAssetLink.finding_id == finding.id).first()
+    if existing_link is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An asset has already been created from this finding",
+        )
+
+    details = payload.details
+    asset_payload = AssetCreate(
+        asset_name=payload.asset_name,
+        asset_category=payload.asset_category,
+        institution=payload.institution,
+        description=payload.description,
+        estimated_value=payload.estimated_value,
+        ownership_type=payload.ownership_type,
+        details=details,
+    )
+    asset = create_asset_record(
+        db,
+        user_id=current_user.id,
+        payload=asset_payload,
+        require_manual_verification=True,
+        commit=False,
+    )
+    db.add(DiscoveryFindingAssetLink(
+        finding_id=finding.id,
+        asset_id=asset.id,
+        user_id=current_user.id,
+    ))
+    try:
+        db.commit()
+        db.refresh(asset)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An asset has already been created from this finding",
+        ) from exc
+    log_event(
+        db,
+        user_id=current_user.id,
+        event_type="asset_created_from_finding",
+        details="Asset manually created from confirmed discovery finding",
+        metadata={
+            "resource_type": "asset",
+            "resource_id": asset.id,
+            "asset_id": asset.id,
+            "finding_id": finding.id,
+            "event_type": "asset_created_from_finding",
+        },
+    )
+    return _asset_response(asset)
 
 
 @router.patch("/findings/{finding_id}", response_model=EvidenceFindingResponse)

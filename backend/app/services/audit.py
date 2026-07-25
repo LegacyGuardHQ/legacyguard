@@ -17,6 +17,7 @@ _ALLOWED_METADATA_KEYS = {
     "document_id",
     "discovery_scan_document_id",
     "finding_id",
+    "asset_id",
 }
 
 

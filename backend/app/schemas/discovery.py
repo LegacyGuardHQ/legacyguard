@@ -1,7 +1,10 @@
 from datetime import datetime
 from typing import Generic, List, TypeVar
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.assets import AssetDetailCreate
 
 from app.models.discovery import (
     EVIDENCE_REVIEW_STATUS_CONFIRMED,
@@ -89,6 +92,25 @@ class PaginatedEvidenceFindingResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class ManualAssetConversionRequest(BaseModel):
+    asset_name: str = Field(..., min_length=1)
+    asset_category: str = Field(..., min_length=1)
+    institution: str | None = None
+    description: str | None = None
+    estimated_value: Decimal | None = Field(default=None, ge=0)
+    ownership_type: str | None = None
+    details: AssetDetailCreate | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("asset_name", "asset_category")
+    @classmethod
+    def validate_required_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Value is required")
+        return value.strip()
 
 
 class EvidenceFindingReviewRequest(BaseModel):
