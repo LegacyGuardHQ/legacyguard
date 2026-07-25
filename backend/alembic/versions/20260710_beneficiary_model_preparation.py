@@ -16,36 +16,59 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("beneficiaries", sa.Column("contact_information_encrypted", sa.Text(), nullable=True))
-    op.add_column("beneficiaries", sa.Column("notes_encrypted", sa.Text(), nullable=True))
-    op.add_column("beneficiaries", sa.Column("status", sa.String(), nullable=False, server_default="Active"))
-    op.add_column("beneficiaries", sa.Column("verification_status", sa.String(), nullable=False, server_default="UNKNOWN"))
-    op.add_column("beneficiaries", sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("beneficiaries", sa.Column("review_due_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("beneficiaries", sa.Column("is_deceased", sa.Boolean(), nullable=False, server_default=sa.false()))
-    op.add_column("beneficiaries", sa.Column("deceased_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("beneficiaries", sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("asset_beneficiaries", sa.Column("beneficiary_role", sa.String(), nullable=False, server_default="PRIMARY"))
-    op.add_column("asset_beneficiaries", sa.Column("priority_order", sa.String(), nullable=True))
-    op.create_unique_constraint("uq_asset_beneficiary_asset_beneficiary", "asset_beneficiaries", ["asset_id", "beneficiary_id"])
-    op.create_check_constraint(
-        "ck_asset_beneficiary_percentage_range",
+    # SQLite supports ADD COLUMN directly for these nullable/defaulted columns.
+    # Adding them individually avoids Alembic batch-recreate ordering cycles.
+    for column in (
+        sa.Column("contact_information_encrypted", sa.Text(), nullable=True),
+        sa.Column("notes_encrypted", sa.Text(), nullable=True),
+        sa.Column("status", sa.String(), nullable=False, server_default="Active"),
+        sa.Column("verification_status", sa.String(), nullable=False, server_default="UNKNOWN"),
+        sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("review_due_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("is_deceased", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("deceased_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
+    ):
+        op.add_column("beneficiaries", column)
+
+    op.add_column(
         "asset_beneficiaries",
-        "percentage IS NULL OR (percentage >= 0 AND percentage <= 100)",
+        sa.Column("beneficiary_role", sa.String(), nullable=False, server_default="PRIMARY"),
     )
+    op.add_column(
+        "asset_beneficiaries",
+        sa.Column("priority_order", sa.String(), nullable=True),
+    )
+
+    # SQLite requires table recreation for new table-level constraints.
+    with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
+        batch_op.create_unique_constraint(
+            "uq_asset_beneficiary_asset_beneficiary",
+            ["asset_id", "beneficiary_id"],
+        )
+        batch_op.create_check_constraint(
+            "ck_asset_beneficiary_percentage_range",
+            "percentage IS NULL OR (percentage >= 0 AND percentage <= 100)",
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_asset_beneficiary_percentage_range", "asset_beneficiaries", type_="check")
-    op.drop_constraint("uq_asset_beneficiary_asset_beneficiary", "asset_beneficiaries", type_="unique")
+    with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
+        batch_op.drop_constraint("ck_asset_beneficiary_percentage_range", type_="check")
+        batch_op.drop_constraint("uq_asset_beneficiary_asset_beneficiary", type_="unique")
+
     op.drop_column("asset_beneficiaries", "priority_order")
     op.drop_column("asset_beneficiaries", "beneficiary_role")
-    op.drop_column("beneficiaries", "archived_at")
-    op.drop_column("beneficiaries", "deceased_at")
-    op.drop_column("beneficiaries", "is_deceased")
-    op.drop_column("beneficiaries", "review_due_at")
-    op.drop_column("beneficiaries", "verified_at")
-    op.drop_column("beneficiaries", "verification_status")
-    op.drop_column("beneficiaries", "status")
-    op.drop_column("beneficiaries", "notes_encrypted")
-    op.drop_column("beneficiaries", "contact_information_encrypted")
+
+    for column_name in (
+        "archived_at",
+        "deceased_at",
+        "is_deceased",
+        "review_due_at",
+        "verified_at",
+        "verification_status",
+        "status",
+        "notes_encrypted",
+        "contact_information_encrypted",
+    ):
+        op.drop_column("beneficiaries", column_name)

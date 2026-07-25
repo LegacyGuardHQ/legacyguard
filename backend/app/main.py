@@ -1,3 +1,6 @@
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,15 +12,26 @@ from app.api.discovery import router as discovery_router
 from app.api.documents import router as documents_router
 from app.api.health import router as health_router
 from app.config import settings
-from app.database.connection import init_db
 from app.services.encryption import validate_encryption_key
 
-validate_encryption_key(settings.encryption_key)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Validate startup configuration without mutating the database schema.
+
+    Database schema changes are owned exclusively by Alembic migrations. This
+    prevents application imports or startup from creating tables/columns ahead
+    of the migration history.
+    """
+    validate_encryption_key(settings.encryption_key)
+    yield
+
 
 app = FastAPI(
     title="LegacyGuard",
     description="Secure personal asset continuity and legacy planning system",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -35,13 +49,6 @@ app.include_router(asset_beneficiaries_router)
 app.include_router(beneficiaries_router)
 app.include_router(documents_router)
 app.include_router(discovery_router)
-
-init_db()
-
-
-@app.on_event("startup")
-def startup_event() -> None:
-    init_db()
 
 
 @app.get("/")
