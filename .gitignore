@@ -49,3 +49,4 @@ private_storage/
 venv/
 env/
 backend/.venv*/
+.continue/

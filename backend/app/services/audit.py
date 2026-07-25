@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from fastapi import Request
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ def log_event(
     event_type: str,
     details: str,
     request: Optional[Request] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     ip_address = None
     if request is not None:
@@ -26,6 +27,8 @@ def log_event(
         timestamp=datetime.now(timezone.utc),
         ip_address=ip_address,
         details=details,
+        metadata=metadata,  # Store the structured metadata
     )
     db.add(audit_entry)
     db.commit()
+
