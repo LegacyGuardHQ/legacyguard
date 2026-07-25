@@ -188,3 +188,56 @@ def test_orchestrator_marks_failed_scans_correctly() -> None:
         assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
     finally:
         db.close()
+
+def test_orchestrator_tracks_completed_document() -> None:
+    from app.models.discovery_scan_document import (
+        DISCOVERY_DOCUMENT_STATUS_COMPLETED,
+        DiscoveryScanDocument,
+    )
+
+    _user_id, document_id = _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+
+        scan = orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+
+        tracked = db.query(DiscoveryScanDocument).filter(
+            DiscoveryScanDocument.scan_id == scan.id
+        ).one()
+        assert tracked.document_id == document_id
+        assert tracked.status == DISCOVERY_DOCUMENT_STATUS_COMPLETED
+        assert tracked.warning_code is None
+    finally:
+        db.close()
+
+
+def test_orchestrator_tracks_failed_document_without_raw_error() -> None:
+    from app.models.discovery_scan_document import (
+        DISCOVERY_DOCUMENT_STATUS_FAILED,
+        DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
+        DiscoveryScanDocument,
+    )
+
+    _user_id, document_id = _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FailingDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+
+        with pytest.raises(DiscoveryOrchestrationError):
+            orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+
+        tracked = db.query(DiscoveryScanDocument).one()
+        assert tracked.status == DISCOVERY_DOCUMENT_STATUS_FAILED
+        assert tracked.warning_code == DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED
+        assert "sensitive internal failure" not in tracked.warning_code
+    finally:
+        db.close()

@@ -128,10 +128,18 @@ def test_review_audit_event_generated_without_sensitive_content() -> None:
     db = SessionLocal()
     try:
         audit = db.query(AuditLog).filter(AuditLog.event_type == "finding_reviewed").one()
-        assert finding_id in audit.details
-        assert "PENDING_REVIEW" in audit.details
-        assert EVIDENCE_REVIEW_STATUS_CONFIRMED in audit.details
+        assert audit.details == "Discovery finding review status changed"
+        assert audit.event_metadata == {
+            "resource_type": "evidence_finding",
+            "resource_id": finding_id,
+            "finding_id": finding_id,
+            "event_type": "finding_reviewed",
+            "old_status": "PENDING_REVIEW",
+            "new_status": EVIDENCE_REVIEW_STATUS_CONFIRMED,
+        }
         assert "Sensitive excerpt" not in audit.details
         assert "retirement" not in audit.details
+        assert "Sensitive excerpt" not in str(audit.event_metadata)
+        assert "retirement" not in str(audit.event_metadata)
     finally:
         db.close()

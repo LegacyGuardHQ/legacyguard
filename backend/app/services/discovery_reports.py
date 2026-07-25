@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -33,3 +34,11 @@ class DiscoveryReportService:
             categories=categories,
             review_statuses=review_statuses,
         )
+
+    def build_safe_export(self, db: Session, scan: DiscoveryScan) -> dict[str, Any]:
+        """Build a serialization-ready report without evidence or document data."""
+        summary = self.build_summary(db, scan)
+        payload: dict[str, Any] = asdict(summary)
+        payload["created_at"] = scan.created_at.isoformat() if scan.created_at else None
+        payload["completed_at"] = scan.completed_at.isoformat() if scan.completed_at else None
+        return payload

@@ -49,6 +49,14 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page_size: int
 
 
+class PaginatedDiscoveryScanResponse(BaseModel):
+    items: list[DiscoveryScanSummaryResponse]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class DiscoveryReportSummaryResponse(BaseModel):
     scan_id: str
     status: str
@@ -77,9 +85,3 @@ class EvidenceFindingReviewRequest(BaseModel):
             raise ValueError("Unsupported review status")
         return value
 
-
-class ReportGenerationRequest(BaseModel):
-    report_format: str = Field(..., pattern="^(json|csv)$") # Only allow json or csv for now
-    filters: dict | None = None
-
-    model_config = ConfigDict(extra="forbid")

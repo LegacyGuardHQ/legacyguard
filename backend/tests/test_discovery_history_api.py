@@ -72,7 +72,10 @@ def test_user_sees_own_scans_newest_first() -> None:
     response = client.get("/discovery/scans", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
-    assert [scan["scan_id"] for scan in response.json()] == ["new-scan", "old-scan"]
+    payload = response.json()
+    assert [scan["scan_id"] for scan in payload["items"]] == ["new-scan", "old-scan"]
+    assert payload["total_count"] == 2
+    assert payload["page"] == 1
 
 
 def test_user_cannot_see_another_users_scans() -> None:
@@ -83,7 +86,9 @@ def test_user_cannot_see_another_users_scans() -> None:
     response = client.get("/discovery/scans", headers={"Authorization": f"Bearer {other_token}"})
 
     assert response.status_code == 200
-    assert response.json() == []
+    payload = response.json()
+    assert payload["items"] == []
+    assert payload["total_count"] == 0
 
 
 def test_summary_counts_are_correct() -> None:
@@ -109,7 +114,7 @@ def test_history_and_summary_exclude_sensitive_fields() -> None:
     _seed_scan(user_id, "safe-scan")
     _seed_finding("safe-scan", "finding-safe", "RETIREMENT_INDICATOR", EVIDENCE_REVIEW_STATUS_PENDING_REVIEW)
 
-    history_payload = client.get("/discovery/scans", headers={"Authorization": f"Bearer {token}"}).json()[0]
+    history_payload = client.get("/discovery/scans", headers={"Authorization": f"Bearer {token}"}).json()["items"][0]
     summary_payload = client.get("/discovery/scans/safe-scan/summary", headers={"Authorization": f"Bearer {token}"}).json()
 
     for payload in (history_payload, summary_payload):
@@ -131,3 +136,54 @@ def test_reports_do_not_contain_raw_evidence() -> None:
 
     assert "Sensitive raw evidence" not in payload_text
     assert "secret-term" not in payload_text
+
+def test_scan_history_pagination() -> None:
+    token = _token("pagination@example.com")
+    user_id = _user_id(token)
+    for index in range(5):
+        _seed_scan(
+            user_id,
+            f"scan-{index}",
+            datetime.now(timezone.utc) - timedelta(minutes=index),
+        )
+
+    response = client.get(
+        "/discovery/scans?page=2&page_size=2",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["scan_id"] for item in payload["items"]] == ["scan-2", "scan-3"]
+    assert payload["total_count"] == 5
+    assert payload["page"] == 2
+    assert payload["page_size"] == 2
+    assert payload["total_pages"] == 3
+
+
+def test_scan_history_page_size_is_bounded() -> None:
+    token = _token("pagination-bounds@example.com")
+
+    assert client.get(
+        "/discovery/scans?page=0",
+        headers={"Authorization": f"Bearer {token}"},
+    ).status_code == 422
+    assert client.get(
+        "/discovery/scans?page_size=101",
+        headers={"Authorization": f"Bearer {token}"},
+    ).status_code == 422
+
+
+def test_pagination_count_is_scoped_to_current_user() -> None:
+    owner_token = _token("page-owner@example.com")
+    other_token = _token("page-other@example.com")
+    _seed_scan(_user_id(owner_token), "owner-page-scan")
+    _seed_scan(_user_id(other_token), "other-page-scan")
+
+    payload = client.get(
+        "/discovery/scans",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    ).json()
+
+    assert payload["total_count"] == 1
+    assert [item["scan_id"] for item in payload["items"]] == ["owner-page-scan"]

@@ -5,6 +5,7 @@ from app.models.audit_log import AuditLog
 from app.models.beneficiary import Beneficiary
 from app.models.contact import Contact
 from app.models.discovery import DiscoveryScan, EvidenceFinding
+from app.models.discovery_scan_document import DiscoveryScanDocument
 from app.models.document import Document
 from app.models.report import Report
 from app.models.session import UserSession
@@ -20,6 +21,7 @@ __all__ = [
     "Beneficiary",
     "Contact",
     "DiscoveryScan",
+    "DiscoveryScanDocument",
     "Document",
     "EvidenceFinding",
     "Report",

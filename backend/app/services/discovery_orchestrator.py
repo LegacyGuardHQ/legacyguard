@@ -1,4 +1,4 @@
-.from __future__ import annotations
+from __future__ import annotations
 
 import json
 import uuid
@@ -17,11 +17,19 @@ from app.models.discovery import (
     DiscoveryScan,
     EvidenceFinding,
 )
+from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_COMPLETED,
+    DISCOVERY_DOCUMENT_STATUS_FAILED,
+    DISCOVERY_DOCUMENT_STATUS_PROCESSING,
+    DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
+    DiscoveryScanDocument,
+)
 from app.models.document import Document
+from app.services.audit import log_event
 from app.services.discovery_engine import DiscoveryEngine
 from app.services.discovery_privacy import DiscoveryPrivacyService
-from app.services.document_extraction import EXTRACTION_METHOD_UNSUPPORTED, DocumentExtractionService
 from app.services.document_content_encryption import document_content_encryption_service
+from app.services.document_extraction import EXTRACTION_METHOD_UNSUPPORTED, DocumentExtractionService
 from app.services.document_storage import LocalDocumentStorage
 
 DISCOVERY_STARTED = "discovery_started"
@@ -29,6 +37,7 @@ DISCOVERY_COMPLETED = "discovery_completed"
 DISCOVERY_FAILED = "discovery_failed"
 EVIDENCE_FINDING_CREATED = "evidence_finding_created"
 DISCOVERY_DOCUMENT_FAILED = "discovery_document_failed"
+DISCOVERY_DOCUMENT_COMPLETED = "discovery_document_completed"
 
 
 class DiscoveryOrchestrationError(RuntimeError):
@@ -49,7 +58,11 @@ class DocumentTextProvider(Protocol):
 
 
 class EncryptedDocumentTextProvider:
-    def __init__(self, storage: LocalDocumentStorage | None = None, extraction_service: DocumentExtractionService | None = None) -> None:
+    def __init__(
+        self,
+        storage: LocalDocumentStorage | None = None,
+        extraction_service: DocumentExtractionService | None = None,
+    ) -> None:
         self.storage = storage or LocalDocumentStorage()
         self.extraction_service = extraction_service or DocumentExtractionService()
 
@@ -59,13 +72,19 @@ class EncryptedDocumentTextProvider:
             raise DiscoveryOrchestrationError("Document content is unavailable")
 
         encrypted_bytes = self.storage.read_encrypted(document.id)
-        plaintext = document_content_encryption_service.decrypt(document.id, encrypted_bytes, encrypted_key_reference)
+        plaintext = document_content_encryption_service.decrypt(
+            document.id,
+            encrypted_bytes,
+            encrypted_key_reference,
+        )
         normalized = self.extraction_service.extract_from_bytes(plaintext, mime_type=document.mime_type)
         if normalized.extraction_method == EXTRACTION_METHOD_UNSUPPORTED:
             raise DiscoveryOrchestrationError("Document format extraction is not supported")
         return normalized.text
 
 
+# Existing tests and integrations provide a simple four-argument callback. The
+# built-in audit service is used when no callback is supplied.
 AuditLogger = Callable[[Session, str, str, str], None]
 
 
@@ -95,17 +114,54 @@ class DiscoveryOrchestrator:
         db.add(scan)
         db.commit()
         db.refresh(scan)
-        self._audit(db, user_id, DISCOVERY_STARTED, f"Discovery scan {scan.id} created")
+        self._audit(
+            db,
+            user_id,
+            DISCOVERY_STARTED,
+            "Discovery scan created",
+            metadata={
+                "resource_type": "discovery_scan",
+                "resource_id": scan.id,
+                "scan_id": scan.id,
+                "event_type": DISCOVERY_STARTED,
+                "new_status": DISCOVERY_SCAN_STATUS_PENDING,
+            },
+        )
 
         try:
             documents = self._get_owned_documents(db, user_id=user_id, document_ids=document_ids)
+            old_scan_status = scan.status
             scan.status = DISCOVERY_SCAN_STATUS_RUNNING
             scan.started_at = datetime.now(timezone.utc)
             db.commit()
+            self._audit(
+                db,
+                user_id,
+                DISCOVERY_STARTED,
+                "Discovery scan started",
+                metadata={
+                    "resource_type": "discovery_scan",
+                    "resource_id": scan.id,
+                    "scan_id": scan.id,
+                    "event_type": DISCOVERY_STARTED,
+                    "old_status": old_scan_status,
+                    "new_status": scan.status,
+                },
+            )
 
             document_failures = 0
             findings_created = 0
             for document in documents:
+                tracking = DiscoveryScanDocument(
+                    id=str(uuid.uuid4()),
+                    scan_id=scan.id,
+                    document_id=document.id,
+                    status=DISCOVERY_DOCUMENT_STATUS_PROCESSING,
+                )
+                db.add(tracking)
+                db.commit()
+                db.refresh(tracking)
+
                 try:
                     document_text = self.text_provider.get_text(document)
                     candidates = self.discovery_engine.analyze_text(document_text)
@@ -126,14 +182,65 @@ class DiscoveryOrchestrator:
                         finding.set_evidence_excerpt(privacy_result.sanitized_excerpt)
                         db.add(finding)
                         findings_created += 1
-                        self._audit(db, user_id, EVIDENCE_FINDING_CREATED, f"Evidence finding created for scan {scan.id}")
+                        self._audit(
+                            db,
+                            user_id,
+                            EVIDENCE_FINDING_CREATED,
+                            "Evidence finding created",
+                            metadata={
+                                "resource_type": "evidence_finding",
+                                "resource_id": finding.id,
+                                "finding_id": finding.id,
+                                "scan_id": scan.id,
+                                "event_type": EVIDENCE_FINDING_CREATED,
+                            },
+                        )
+
+                    tracking.status = DISCOVERY_DOCUMENT_STATUS_COMPLETED
+                    tracking.warning_code = None
                     scan.documents_processed += 1
                     db.commit()
+                    self._audit(
+                        db,
+                        user_id,
+                        DISCOVERY_DOCUMENT_COMPLETED,
+                        "Discovery document processing completed",
+                        metadata={
+                            "resource_type": "discovery_scan_document",
+                            "resource_id": tracking.id,
+                            "scan_id": scan.id,
+                            "document_id": document.id,
+                            "discovery_scan_document_id": tracking.id,
+                            "event_type": DISCOVERY_DOCUMENT_COMPLETED,
+                            "old_status": DISCOVERY_DOCUMENT_STATUS_PROCESSING,
+                            "new_status": DISCOVERY_DOCUMENT_STATUS_COMPLETED,
+                        },
+                    )
                 except Exception:
                     db.rollback()
                     document_failures += 1
-                    self._audit(db, user_id, DISCOVERY_DOCUMENT_FAILED, f"Document failed during discovery scan {scan.id}")
+                    tracking = db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.id == tracking.id).one()
+                    tracking.status = DISCOVERY_DOCUMENT_STATUS_FAILED
+                    tracking.warning_code = DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED
+                    db.commit()
+                    self._audit(
+                        db,
+                        user_id,
+                        DISCOVERY_DOCUMENT_FAILED,
+                        "Discovery document processing failed",
+                        metadata={
+                            "resource_type": "discovery_scan_document",
+                            "resource_id": tracking.id,
+                            "scan_id": scan.id,
+                            "document_id": document.id,
+                            "discovery_scan_document_id": tracking.id,
+                            "event_type": DISCOVERY_DOCUMENT_FAILED,
+                            "old_status": DISCOVERY_DOCUMENT_STATUS_PROCESSING,
+                            "new_status": DISCOVERY_DOCUMENT_STATUS_FAILED,
+                        },
+                    )
 
+            old_scan_status = scan.status
             if document_failures and scan.documents_processed == 0:
                 scan.status = DISCOVERY_SCAN_STATUS_FAILED
             elif document_failures and findings_created > 0:
@@ -145,17 +252,60 @@ class DiscoveryOrchestrator:
             scan.completed_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(scan)
+
             if scan.status == DISCOVERY_SCAN_STATUS_FAILED:
-                self._audit(db, user_id, DISCOVERY_FAILED, f"Discovery scan {scan.id} failed")
+                self._audit(
+                    db,
+                    user_id,
+                    DISCOVERY_FAILED,
+                    "Discovery scan failed",
+                    metadata={
+                        "resource_type": "discovery_scan",
+                        "resource_id": scan.id,
+                        "scan_id": scan.id,
+                        "event_type": DISCOVERY_FAILED,
+                        "old_status": old_scan_status,
+                        "new_status": scan.status,
+                    },
+                )
                 raise DiscoveryOrchestrationError("Discovery scan failed")
-            self._audit(db, user_id, DISCOVERY_COMPLETED, f"Discovery scan {scan.id} completed with status {scan.status}")
+
+            self._audit(
+                db,
+                user_id,
+                DISCOVERY_COMPLETED,
+                "Discovery scan completed",
+                metadata={
+                    "resource_type": "discovery_scan",
+                    "resource_id": scan.id,
+                    "scan_id": scan.id,
+                    "event_type": DISCOVERY_COMPLETED,
+                    "old_status": old_scan_status,
+                    "new_status": scan.status,
+                },
+            )
             return scan
         except Exception as exc:
             db.rollback()
+            scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan.id).one()
+            old_scan_status = scan.status
             scan.status = DISCOVERY_SCAN_STATUS_FAILED
             scan.completed_at = datetime.now(timezone.utc)
             db.commit()
-            self._audit(db, user_id, DISCOVERY_FAILED, f"Discovery scan {scan.id} failed")
+            self._audit(
+                db,
+                user_id,
+                DISCOVERY_FAILED,
+                "Discovery scan failed",
+                metadata={
+                    "resource_type": "discovery_scan",
+                    "resource_id": scan.id,
+                    "scan_id": scan.id,
+                    "event_type": DISCOVERY_FAILED,
+                    "old_status": old_scan_status,
+                    "new_status": scan.status,
+                },
+            )
             raise DiscoveryOrchestrationError("Discovery scan failed") from exc
 
     def _get_owned_documents(self, db: Session, *, user_id: str, document_ids: list[str]) -> list[Document]:
@@ -164,6 +314,22 @@ class DiscoveryOrchestrator:
             raise DiscoveryOrchestrationError("One or more documents were not found")
         return documents
 
-    def _audit(self, db: Session, user_id: str, event_type: str, details: str) -> None:
+    def _audit(
+        self,
+        db: Session,
+        user_id: str,
+        event_type: str,
+        details: str,
+        *,
+        metadata: dict[str, object] | None = None,
+    ) -> None:
         if self.audit_logger is not None:
             self.audit_logger(db, user_id, event_type, details)
+            return
+        log_event(
+            db,
+            user_id=user_id,
+            event_type=event_type,
+            details=details,
+            metadata=metadata,
+        )

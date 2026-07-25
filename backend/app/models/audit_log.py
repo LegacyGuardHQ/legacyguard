@@ -1,5 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text
-from sqlalchemy.dialects.postgresql import JSONB  # Import JSONB
+from sqlalchemy import JSON, Column, DateTime, String, Text
 from sqlalchemy.sql import func
 
 from app.database.connection import Base
@@ -14,5 +13,6 @@ class AuditLog(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     ip_address = Column(String, nullable=True)
     details = Column(Text, nullable=True)
-    metadata = Column(JSONB, nullable=True)  # Add new metadata column
-
+    # ``metadata`` is reserved by SQLAlchemy's declarative API, so the Python
+    # attribute uses a safe name while the database column remains "metadata".
+    event_metadata = Column("metadata", JSON, nullable=True)

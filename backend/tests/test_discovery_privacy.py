@@ -84,3 +84,20 @@ def test_empty_input_is_handled_safely() -> None:
     assert result.sanitized_excerpt is None
     assert result.redaction_applied is False
     assert result.warnings == []
+
+def test_audit_metadata_discards_sensitive_or_unknown_keys() -> None:
+    from app.services.audit import _sanitize_metadata
+
+    result = _sanitize_metadata({
+        "resource_type": "discovery_scan",
+        "resource_id": "scan-1",
+        "document_text": "secret content",
+        "evidence_excerpt": "secret evidence",
+        "nested": {"secret": True},
+    })
+
+    assert result == {
+        "resource_type": "discovery_scan",
+        "resource_id": "scan-1",
+    }
+    assert "secret" not in str(result)

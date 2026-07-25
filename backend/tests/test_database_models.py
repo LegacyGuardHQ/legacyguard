@@ -570,3 +570,30 @@ def test_informational_and_inactive_links_do_not_count_toward_totals() -> None:
 
     assert primary.total == 100
     assert informational.total == 0
+
+
+def test_audit_metadata_uses_safe_attribute_name() -> None:
+    from app.models.audit_log import AuditLog
+
+    entry = AuditLog(
+        id="audit-safe",
+        event_type="test_event",
+        details="safe",
+        event_metadata={"resource_type": "discovery_scan", "resource_id": "scan-1"},
+    )
+    assert entry.event_metadata["resource_id"] == "scan-1"
+    assert "metadata" in AuditLog.__table__.columns
+
+
+def test_discovery_scan_document_model_fields() -> None:
+    from app.models.discovery_scan_document import DiscoveryScanDocument
+
+    tracked = DiscoveryScanDocument(
+        id="tracked-1",
+        scan_id="scan-1",
+        document_id="doc-1",
+        status="PENDING",
+    )
+    assert tracked.scan_id == "scan-1"
+    assert tracked.document_id == "doc-1"
+    assert tracked.warning_code is None

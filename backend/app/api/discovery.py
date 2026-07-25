@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.models.discovery import DiscoveryScan, EvidenceFinding
@@ -11,6 +11,7 @@ from app.schemas.discovery import (
     DiscoveryScanSummaryResponse,
     EvidenceFindingResponse,
     EvidenceFindingReviewRequest,
+    PaginatedDiscoveryScanResponse,
 )
 from app.security.auth import get_current_user, get_db
 from app.services.audit import log_event
@@ -88,13 +89,30 @@ def create_discovery_scan(
     return _scan_response(scan)
 
 
-@router.get("/scans", response_model=list[DiscoveryScanSummaryResponse])
+@router.get("/scans", response_model=PaginatedDiscoveryScanResponse)
 def list_discovery_scans(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> list[DiscoveryScanSummaryResponse]:
-    scans = db.query(DiscoveryScan).filter(DiscoveryScan.user_id == current_user.id).order_by(DiscoveryScan.created_at.desc()).all()
-    return [_scan_summary_response(scan) for scan in scans]
+) -> PaginatedDiscoveryScanResponse:
+    owned_query = db.query(DiscoveryScan).filter(DiscoveryScan.user_id == current_user.id)
+    total_count = owned_query.count()
+    scans = (
+        owned_query
+        .order_by(DiscoveryScan.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    total_pages = (total_count + page_size - 1) // page_size if total_count else 0
+    return PaginatedDiscoveryScanResponse(
+        items=[_scan_summary_response(scan) for scan in scans],
+        total_count=total_count,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/scans/{scan_id}", response_model=DiscoveryScanStatusResponse)
@@ -151,6 +169,14 @@ def review_discovery_finding(
         db,
         user_id=current_user.id,
         event_type="finding_reviewed",
-        details=f"finding_id={finding.id}; old_status={old_status}; new_status={finding.review_status}",
+        details="Discovery finding review status changed",
+        metadata={
+            "resource_type": "evidence_finding",
+            "resource_id": finding.id,
+            "finding_id": finding.id,
+            "event_type": "finding_reviewed",
+            "old_status": old_status,
+            "new_status": finding.review_status,
+        },
     )
     return _finding_response(finding)
