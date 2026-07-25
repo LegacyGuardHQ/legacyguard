@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.models.discovery import DiscoveryScan, EvidenceFinding
+from app.models.discovery import EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, EVIDENCE_REVIEW_STATUS_VALUES, DiscoveryScan, EvidenceFinding
 from app.models.user import User
 from app.schemas.discovery import (
     DiscoveryReportSummaryResponse,
@@ -13,6 +13,7 @@ from app.schemas.discovery import (
     EvidenceFindingResponse,
     EvidenceFindingReviewRequest,
     PaginatedDiscoveryScanResponse,
+    PaginatedEvidenceFindingResponse,
 )
 from app.security.auth import get_current_user, get_db
 from app.services.audit import log_event
@@ -154,15 +155,76 @@ def get_discovery_scan_report(
     return DiscoverySafeReportResponse(**payload)
 
 
-@router.get("/scans/{scan_id}/findings", response_model=list[EvidenceFindingResponse])
+@router.get("/scans/{scan_id}/findings", response_model=PaginatedEvidenceFindingResponse)
 def list_discovery_findings(
     scan_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    review_status: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> list[EvidenceFindingResponse]:
+) -> PaginatedEvidenceFindingResponse:
     scan = _get_owned_scan(db, scan_id, current_user.id)
-    findings = db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan.id).order_by(EvidenceFinding.created_at.asc()).all()
-    return [_finding_response(finding) for finding in findings]
+    if review_status is not None and review_status not in EVIDENCE_REVIEW_STATUS_VALUES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported review status")
+
+    owned_query = db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan.id)
+    if review_status is not None:
+        owned_query = owned_query.filter(EvidenceFinding.review_status == review_status)
+
+    total_count = owned_query.count()
+    findings = (
+        owned_query
+        .order_by(EvidenceFinding.created_at.asc(), EvidenceFinding.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    total_pages = (total_count + page_size - 1) // page_size if total_count else 0
+    return PaginatedEvidenceFindingResponse(
+        items=[_finding_response(finding) for finding in findings],
+        total_count=total_count,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
+@router.get("/findings/review-queue", response_model=PaginatedEvidenceFindingResponse)
+def list_discovery_review_queue(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    review_status: str = Query(EVIDENCE_REVIEW_STATUS_PENDING_REVIEW),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PaginatedEvidenceFindingResponse:
+    if review_status not in EVIDENCE_REVIEW_STATUS_VALUES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported review status")
+
+    owned_query = (
+        db.query(EvidenceFinding)
+        .join(DiscoveryScan, EvidenceFinding.scan_id == DiscoveryScan.id)
+        .filter(
+            DiscoveryScan.user_id == current_user.id,
+            EvidenceFinding.review_status == review_status,
+        )
+    )
+    total_count = owned_query.count()
+    findings = (
+        owned_query
+        .order_by(EvidenceFinding.created_at.asc(), EvidenceFinding.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    total_pages = (total_count + page_size - 1) // page_size if total_count else 0
+    return PaginatedEvidenceFindingResponse(
+        items=[_finding_response(finding) for finding in findings],
+        total_count=total_count,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.patch("/findings/{finding_id}", response_model=EvidenceFindingResponse)

@@ -114,7 +114,9 @@ def test_findings_endpoint_hides_sensitive_fields() -> None:
 
     response = client.get("/discovery/scans/scan-findings/findings", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
-    item = response.json()[0]
+    payload = response.json()
+    assert payload["total_count"] == 1
+    item = payload["items"][0]
     assert set(item.keys()) == {"finding_id", "category", "confidence_score", "review_status", "created_at"}
     assert "matched_terms" not in item
     assert "matched_terms_encrypted" not in item

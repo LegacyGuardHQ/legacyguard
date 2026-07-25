@@ -79,6 +79,14 @@ class EvidenceFindingResponse(BaseModel):
     created_at: datetime
 
 
+class PaginatedEvidenceFindingResponse(BaseModel):
+    items: list[EvidenceFindingResponse]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class EvidenceFindingReviewRequest(BaseModel):
     review_status: str
 
