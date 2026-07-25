@@ -59,6 +59,15 @@ def _finding_response(finding: EvidenceFinding) -> EvidenceFindingResponse:
     )
 
 
+
+def _review_event_type(old_status: str, new_status: str) -> str:
+    if new_status == EVIDENCE_REVIEW_STATUS_PENDING_REVIEW:
+        return "finding_review_reopened"
+    if old_status == EVIDENCE_REVIEW_STATUS_PENDING_REVIEW:
+        return "finding_reviewed"
+    return "finding_review_corrected"
+
+
 def _get_owned_scan(db: Session, scan_id: str, user_id: str) -> DiscoveryScan:
     scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id, DiscoveryScan.user_id == user_id).first()
     if scan is None:
@@ -236,19 +245,26 @@ def review_discovery_finding(
 ) -> EvidenceFindingResponse:
     finding = _get_owned_finding(db, finding_id, current_user.id)
     old_status = finding.review_status
+    if old_status == payload.review_status:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Finding is already in the requested review status",
+        )
+
+    event_type = _review_event_type(old_status, payload.review_status)
     finding.review_status = payload.review_status
     db.commit()
     db.refresh(finding)
     log_event(
         db,
         user_id=current_user.id,
-        event_type="finding_reviewed",
+        event_type=event_type,
         details="Discovery finding review status changed",
         metadata={
             "resource_type": "evidence_finding",
             "resource_id": finding.id,
             "finding_id": finding.id,
-            "event_type": "finding_reviewed",
+            "event_type": event_type,
             "old_status": old_status,
             "new_status": finding.review_status,
         },

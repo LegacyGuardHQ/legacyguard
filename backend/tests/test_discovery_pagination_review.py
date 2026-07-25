@@ -232,3 +232,22 @@ def test_review_queue_rejects_invalid_parameters() -> None:
     assert client.get("/discovery/findings/review-queue?page=0", headers=headers).status_code == 422
     assert client.get("/discovery/findings/review-queue?page_size=101", headers=headers).status_code == 422
     assert client.get("/discovery/findings/review-queue?review_status=UNKNOWN", headers=headers).status_code == 422
+
+
+def test_reopened_finding_returns_to_default_review_queue() -> None:
+    token = _token("queue-reopened@example.com")
+    user_id = _user_id(token)
+    _seed_scan_with_findings(user_id, "queue-reopened", [EVIDENCE_REVIEW_STATUS_CONFIRMED])
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.patch(
+        "/discovery/findings/queue-reopened-finding-0",
+        headers=headers,
+        json={"review_status": EVIDENCE_REVIEW_STATUS_PENDING_REVIEW},
+    )
+    assert response.status_code == 200
+
+    queue = client.get("/discovery/findings/review-queue", headers=headers)
+    assert queue.status_code == 200
+    assert queue.json()["total_count"] == 1
+    assert queue.json()["items"][0]["finding_id"] == "queue-reopened-finding-0"

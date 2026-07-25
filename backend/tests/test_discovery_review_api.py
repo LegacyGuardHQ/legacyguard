@@ -99,7 +99,7 @@ def test_invalid_review_status_rejected() -> None:
     token = _token("invalid@example.com")
     finding_id = _create_finding(_user_id(token))
 
-    response = client.patch(f"/discovery/findings/{finding_id}", headers={"Authorization": f"Bearer {token}"}, json={"review_status": "PENDING_REVIEW"})
+    response = client.patch(f"/discovery/findings/{finding_id}", headers={"Authorization": f"Bearer {token}"}, json={"review_status": "UNKNOWN"})
 
     assert response.status_code == 422
 
@@ -141,5 +141,114 @@ def test_review_audit_event_generated_without_sensitive_content() -> None:
         assert "retirement" not in audit.details
         assert "Sensitive excerpt" not in str(audit.event_metadata)
         assert "retirement" not in str(audit.event_metadata)
+    finally:
+        db.close()
+
+def test_user_can_reopen_confirmed_finding() -> None:
+    token = _token("reopen-confirmed@example.com")
+    finding_id = _create_finding(_user_id(token), "finding-reopen-confirmed")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert client.patch(
+        f"/discovery/findings/{finding_id}",
+        headers=headers,
+        json={"review_status": EVIDENCE_REVIEW_STATUS_CONFIRMED},
+    ).status_code == 200
+
+    response = client.patch(
+        f"/discovery/findings/{finding_id}",
+        headers=headers,
+        json={"review_status": EVIDENCE_REVIEW_STATUS_PENDING_REVIEW},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["review_status"] == EVIDENCE_REVIEW_STATUS_PENDING_REVIEW
+
+    db = SessionLocal()
+    try:
+        audit = db.query(AuditLog).filter(AuditLog.event_type == "finding_review_reopened").one()
+        assert audit.event_metadata["old_status"] == EVIDENCE_REVIEW_STATUS_CONFIRMED
+        assert audit.event_metadata["new_status"] == EVIDENCE_REVIEW_STATUS_PENDING_REVIEW
+    finally:
+        db.close()
+
+
+def test_user_can_correct_confirmed_finding_to_dismissed() -> None:
+    token = _token("correct-review@example.com")
+    finding_id = _create_finding(_user_id(token), "finding-correct-review")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert client.patch(
+        f"/discovery/findings/{finding_id}",
+        headers=headers,
+        json={"review_status": EVIDENCE_REVIEW_STATUS_CONFIRMED},
+    ).status_code == 200
+
+    response = client.patch(
+        f"/discovery/findings/{finding_id}",
+        headers=headers,
+        json={"review_status": EVIDENCE_REVIEW_STATUS_DISMISSED},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["review_status"] == EVIDENCE_REVIEW_STATUS_DISMISSED
+
+    db = SessionLocal()
+    try:
+        audit = db.query(AuditLog).filter(AuditLog.event_type == "finding_review_corrected").one()
+        assert audit.event_metadata["old_status"] == EVIDENCE_REVIEW_STATUS_CONFIRMED
+        assert audit.event_metadata["new_status"] == EVIDENCE_REVIEW_STATUS_DISMISSED
+    finally:
+        db.close()
+
+
+def test_same_review_status_is_rejected_without_new_audit_event() -> None:
+    token = _token("same-review@example.com")
+    finding_id = _create_finding(_user_id(token), "finding-same-review")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    first = client.patch(
+        f"/discovery/findings/{finding_id}",
+        headers=headers,
+        json={"review_status": EVIDENCE_REVIEW_STATUS_CONFIRMED},
+    )
+    assert first.status_code == 200
+
+    second = client.patch(
+        f"/discovery/findings/{finding_id}",
+        headers=headers,
+        json={"review_status": EVIDENCE_REVIEW_STATUS_CONFIRMED},
+    )
+    assert second.status_code == 409
+
+    db = SessionLocal()
+    try:
+        assert db.query(AuditLog).filter(AuditLog.event_type == "finding_reviewed").count() == 1
+    finally:
+        db.close()
+
+
+def test_review_status_changes_do_not_create_assets() -> None:
+    from app.models.asset import Asset
+
+    token = _token("no-auto-asset@example.com")
+    finding_id = _create_finding(_user_id(token), "finding-no-auto-asset")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for review_status in (
+        EVIDENCE_REVIEW_STATUS_CONFIRMED,
+        EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+        EVIDENCE_REVIEW_STATUS_DISMISSED,
+    ):
+        response = client.patch(
+            f"/discovery/findings/{finding_id}",
+            headers=headers,
+            json={"review_status": review_status},
+        )
+        assert response.status_code == 200
+
+    db = SessionLocal()
+    try:
+        assert db.query(Asset).count() == 0
     finally:
         db.close()

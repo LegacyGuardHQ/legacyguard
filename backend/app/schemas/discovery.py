@@ -3,7 +3,11 @@ from typing import Generic, List, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.discovery import EVIDENCE_REVIEW_STATUS_CONFIRMED, EVIDENCE_REVIEW_STATUS_DISMISSED
+from app.models.discovery import (
+    EVIDENCE_REVIEW_STATUS_CONFIRMED,
+    EVIDENCE_REVIEW_STATUS_DISMISSED,
+    EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+)
 
 T = TypeVar('T')
 
@@ -95,7 +99,11 @@ class EvidenceFindingReviewRequest(BaseModel):
     @field_validator("review_status")
     @classmethod
     def validate_review_status(cls, value: str) -> str:
-        if value not in {EVIDENCE_REVIEW_STATUS_CONFIRMED, EVIDENCE_REVIEW_STATUS_DISMISSED}:
+        if value not in {
+            EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+            EVIDENCE_REVIEW_STATUS_CONFIRMED,
+            EVIDENCE_REVIEW_STATUS_DISMISSED,
+        }:
             raise ValueError("Unsupported review status")
         return value
 
