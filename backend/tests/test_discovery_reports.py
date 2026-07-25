@@ -52,6 +52,7 @@ def test_safe_export_contains_counts_but_not_evidence() -> None:
 
         assert payload["scan_id"] == scan.id
         assert payload["total_findings"] == 1
+        assert payload["documents_processed"] == 1
         assert payload["categories"] == {"RETIREMENT_INDICATOR": 1}
         assert "secret-term" not in payload_text
         assert "Sensitive raw evidence" not in payload_text

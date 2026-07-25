@@ -39,6 +39,7 @@ class DiscoveryReportService:
         """Build a serialization-ready report without evidence or document data."""
         summary = self.build_summary(db, scan)
         payload: dict[str, Any] = asdict(summary)
+        payload["documents_processed"] = scan.documents_processed
         payload["created_at"] = scan.created_at.isoformat() if scan.created_at else None
         payload["completed_at"] = scan.completed_at.isoformat() if scan.completed_at else None
         return payload

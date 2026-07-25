@@ -5,6 +5,7 @@ from app.models.discovery import DiscoveryScan, EvidenceFinding
 from app.models.user import User
 from app.schemas.discovery import (
     DiscoveryReportSummaryResponse,
+    DiscoverySafeReportResponse,
     DiscoveryScanCreate,
     DiscoveryScanResponse,
     DiscoveryScanStatusResponse,
@@ -140,6 +141,17 @@ def get_discovery_scan_summary(
         categories=summary.categories,
         review_statuses=summary.review_statuses,
     )
+
+
+@router.get("/scans/{scan_id}/report", response_model=DiscoverySafeReportResponse)
+def get_discovery_scan_report(
+    scan_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DiscoverySafeReportResponse:
+    scan = _get_owned_scan(db, scan_id, current_user.id)
+    payload = discovery_report_service.build_safe_export(db, scan)
+    return DiscoverySafeReportResponse(**payload)
 
 
 @router.get("/scans/{scan_id}/findings", response_model=list[EvidenceFindingResponse])

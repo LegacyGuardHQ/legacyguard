@@ -65,6 +65,12 @@ class DiscoveryReportSummaryResponse(BaseModel):
     review_statuses: dict[str, int]
 
 
+class DiscoverySafeReportResponse(DiscoveryReportSummaryResponse):
+    documents_processed: int
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
 class EvidenceFindingResponse(BaseModel):
     finding_id: str
     category: str

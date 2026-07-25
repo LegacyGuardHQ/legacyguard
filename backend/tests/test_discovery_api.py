@@ -136,3 +136,82 @@ def test_scan_status_response_schema_is_correct() -> None:
     response = client.get("/discovery/scans/scan-status", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert set(response.json().keys()) == {"scan_id", "status", "documents_processed", "created_at", "completed_at"}
+
+def test_safe_report_endpoint_returns_only_summary_fields() -> None:
+    token = _token("report-owner@example.com")
+    user_id = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+    db = SessionLocal()
+    try:
+        scan = DiscoveryScan(
+            id="scan-report",
+            user_id=user_id,
+            status="COMPLETE",
+            documents_processed=1,
+            created_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+        )
+        finding = EvidenceFinding(
+            id="finding-report",
+            scan_id=scan.id,
+            document_id="doc-report",
+            category="RETIREMENT_INDICATOR",
+            confidence_score=90,
+            review_status=EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+        )
+        finding.set_matched_terms('["private-term"]')
+        finding.set_evidence_excerpt("Highly sensitive evidence")
+        db.add_all([scan, finding])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/discovery/scans/scan-report/report",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload) == {
+        "scan_id",
+        "status",
+        "documents_processed",
+        "total_findings",
+        "categories",
+        "review_statuses",
+        "created_at",
+        "completed_at",
+    }
+    assert payload["documents_processed"] == 1
+    assert payload["total_findings"] == 1
+    assert payload["categories"] == {"RETIREMENT_INDICATOR": 1}
+    assert "private-term" not in str(payload)
+    assert "Highly sensitive evidence" not in str(payload)
+    assert "document_id" not in payload
+
+
+def test_safe_report_endpoint_enforces_scan_ownership() -> None:
+    owner_token = _token("report-owner-two@example.com")
+    other_token = _token("report-other@example.com")
+    owner_id = client.get("/auth/me", headers={"Authorization": f"Bearer {owner_token}"}).json()["id"]
+    db = SessionLocal()
+    try:
+        db.add(
+            DiscoveryScan(
+                id="scan-private-report",
+                user_id=owner_id,
+                status="COMPLETE",
+                documents_processed=0,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/discovery/scans/scan-private-report/report",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+
+    assert response.status_code == 404
