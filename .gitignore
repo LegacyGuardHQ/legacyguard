@@ -43,6 +43,12 @@ private_storage/
 *_Clean_Map.txt
 *_tree.txt
 
+# Coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
 # Python virtual environments
 .venv/
 .venv*/
