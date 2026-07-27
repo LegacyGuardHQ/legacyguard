@@ -8,8 +8,17 @@ from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
 from app.models.document import DOCUMENT_STATUS_ACTIVE, DOCUMENT_VERIFICATION_UNKNOWN, Document
 from app.models.user import User
-from app.schemas.documents import DocumentCreate, DocumentListResponse, DocumentResponse, DocumentUploadResponse
+from app.models.discovery import DiscoveryScan
+from app.models.discovery_scan_document import DiscoveryScanDocument
+from app.schemas.documents import (
+    DocumentCreate,
+    DocumentListResponse,
+    DocumentResponse,
+    DocumentUploadDiscoveryScanResponse,
+    DocumentUploadResponse,
+)
 from app.security.auth import get_current_user, get_db
+from app.services.discovery_orchestrator import DiscoveryOrchestrationError, DiscoveryOrchestrator, DiscoveryScanExecutor
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
 from app.services.document_storage import DocumentStorageError, LocalDocumentStorage
 from app.services.document_validation import (
@@ -24,6 +33,7 @@ from app.services.document_validation import (
 router = APIRouter(prefix="/documents", tags=["documents"])
 document_storage = LocalDocumentStorage()
 malware_scanner: MalwareScanner | None = None
+discovery_scan_executor = DiscoveryScanExecutor(DiscoveryOrchestrator())
 
 
 def _get_owned_asset_if_supplied(db: Session, asset_id: str | None, user_id: str) -> Asset | None:
@@ -80,6 +90,30 @@ def _get_owned_document(db: Session, document_id: str, user_id: str) -> Document
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return document
+
+
+def _trigger_discovery_scan_after_upload(
+    db: Session,
+    *,
+    user_id: str,
+    document_id: str,
+) -> DocumentUploadDiscoveryScanResponse | None:
+    try:
+        scan = discovery_scan_executor.process(db, user_id=user_id, document_ids=[document_id])
+    except DiscoveryOrchestrationError:
+        scan = (
+            db.query(DiscoveryScan)
+            .join(DiscoveryScanDocument, DiscoveryScanDocument.scan_id == DiscoveryScan.id)
+            .filter(
+                DiscoveryScan.user_id == user_id,
+                DiscoveryScanDocument.document_id == document_id,
+            )
+            .order_by(DiscoveryScan.created_at.desc())
+            .first()
+        )
+        if scan is None:
+            return None
+    return DocumentUploadDiscoveryScanResponse(scan_id=scan.id, status=scan.status)
 
 
 def _validate_document_upload_lifecycle(db: Session, document: Document, user_id: str) -> None:
@@ -206,6 +240,12 @@ async def upload_encrypted_document_content(
                 pass
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
 
+    discovery_scan = _trigger_discovery_scan_after_upload(
+        db,
+        user_id=current_user.id,
+        document_id=document.id,
+    )
+
     return DocumentUploadResponse(
         id=document.id,
         document_type=document.document_type,
@@ -216,4 +256,5 @@ async def upload_encrypted_document_content(
         checksum_sha256=document.checksum_sha256,
         upload_status="COMPLETED",
         updated_at=document.updated_at,
+        discovery_scan=discovery_scan,
     )

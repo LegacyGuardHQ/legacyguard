@@ -10,10 +10,12 @@ os.environ.setdefault("ENCRYPTION_KEY", "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWF
 os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
+from app.api import documents as documents_api
 from app.database.connection import SessionLocal
 from app.main import app
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
+from app.models.discovery import DiscoveryScan, EvidenceFinding
 from app.models.document import Document
 from app.services.rate_limit import rate_limiter
 
@@ -441,3 +443,71 @@ def test_upload_database_failure_after_storage_triggers_cleanup(monkeypatch) -> 
 
     assert response.status_code == 500
     assert deleted["called"] is True
+
+
+def test_upload_triggers_discovery_scan_for_text_document() -> None:
+    token = _token("upload-discovery@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    plaintext = b"retirement rollover account"
+
+    response = _upload_document(
+        token,
+        document_id,
+        content=plaintext,
+        filename="statement.txt",
+        mime_type="text/plain",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["upload_status"] == "COMPLETED"
+    assert payload["discovery_scan"] is not None
+    assert payload["discovery_scan"]["status"] == "COMPLETE"
+    scan_id = payload["discovery_scan"]["scan_id"]
+
+    db = SessionLocal()
+    try:
+        scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).one()
+        assert scan.user_id == client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+        assert scan.documents_processed == 1
+        findings = db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan_id).all()
+        assert len(findings) >= 1
+        assert findings[0].document_id == document_id
+    finally:
+        db.close()
+        documents_api.document_storage.delete_permanently(document_id)
+
+    findings_response = client.get(
+        f"/discovery/scans/{scan_id}/findings",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert findings_response.status_code == 200
+    assert findings_response.json()["total_count"] >= 1
+
+
+def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
+    token = _token("upload-discovery-pdf@example.com")
+    document = _post_document(token)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    plaintext = b"%PDF-1.4\nvalid pdf bytes"
+
+    response = _upload_document(token, document_id, content=plaintext)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["upload_status"] == "COMPLETED"
+    assert payload["discovery_scan"] is not None
+    assert payload["discovery_scan"]["status"] == "FAILED"
+
+    db = SessionLocal()
+    try:
+        saved = db.query(Document).filter(Document.id == document_id).one()
+        assert saved.encryption_key_reference_encrypted is not None
+        scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == payload["discovery_scan"]["scan_id"]).one()
+        assert scan.status == "FAILED"
+    finally:
+        db.close()
+        documents_api.document_storage.delete_permanently(document_id)
