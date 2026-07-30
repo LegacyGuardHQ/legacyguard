@@ -17,6 +17,11 @@ from app.main import app
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
 from app.models.discovery import DiscoveryScan, EvidenceFinding
+from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
+    DiscoveryScanDocument,
+)
 from app.models.document import Document
 from app.services.rate_limit import rate_limiter
 
@@ -495,22 +500,30 @@ def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
     document_id = document.json()["id"]
     plaintext = b"%PDF-1.4\nvalid pdf bytes"
 
-    response = _upload_document(token, document_id, content=plaintext)
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["upload_status"] == "COMPLETED"
-    assert payload["discovery_scan"] is not None
-    assert payload["discovery_scan"]["status"] == "FAILED"
-
-    db = SessionLocal()
     try:
-        saved = db.query(Document).filter(Document.id == document_id).one()
-        assert saved.encryption_key_reference_encrypted is not None
-        scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == payload["discovery_scan"]["scan_id"]).one()
-        assert scan.status == "FAILED"
+        response = _upload_document(token, document_id, content=plaintext)
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["upload_status"] == "COMPLETED"
+        assert payload["discovery_scan"] is not None
+        assert payload["discovery_scan"]["status"] == "COMPLETED_WITH_WARNINGS"
+
+        db = SessionLocal()
+        try:
+            saved = db.query(Document).filter(Document.id == document_id).one()
+            assert saved.encryption_key_reference_encrypted is not None
+            scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == payload["discovery_scan"]["scan_id"]).one()
+            assert scan.status == "COMPLETED_WITH_WARNINGS"
+            assert scan.documents_processed == 0
+            tracking = db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan.id).one()
+            assert tracking.status == DISCOVERY_DOCUMENT_STATUS_SKIPPED
+            assert tracking.warning_code == DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION
+        finally:
+            db.close()
+
+        assert documents_api.document_storage.exists(document_id)
     finally:
-        db.close()
         documents_api.document_storage.delete_permanently(document_id)
 
 
@@ -554,3 +567,15 @@ def test_upload_still_succeeds_when_post_upload_discovery_raises(monkeypatch) ->
         assert documents_api.document_storage.exists(document_id)
     finally:
         documents_api.document_storage.delete_permanently(document_id)
+
+
+def test_empty_discovery_scan_request_remains_rejected() -> None:
+    token = _token("empty-discovery-scan@example.com")
+
+    response = client.post(
+        "/discovery/scans",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"document_ids": []},
+    )
+
+    assert response.status_code == 422

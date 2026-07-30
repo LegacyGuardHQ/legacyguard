@@ -21,7 +21,9 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_STATUS_COMPLETED,
     DISCOVERY_DOCUMENT_STATUS_FAILED,
     DISCOVERY_DOCUMENT_STATUS_PROCESSING,
+    DISCOVERY_DOCUMENT_STATUS_SKIPPED,
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
+    DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
 from app.models.document import Document
@@ -38,9 +40,14 @@ DISCOVERY_FAILED = "discovery_failed"
 EVIDENCE_FINDING_CREATED = "evidence_finding_created"
 DISCOVERY_DOCUMENT_FAILED = "discovery_document_failed"
 DISCOVERY_DOCUMENT_COMPLETED = "discovery_document_completed"
+DISCOVERY_DOCUMENT_SKIPPED = "discovery_document_skipped"
 
 
 class DiscoveryOrchestrationError(RuntimeError):
+    pass
+
+
+class UnsupportedDocumentExtractionError(DiscoveryOrchestrationError):
     pass
 
 
@@ -79,7 +86,7 @@ class EncryptedDocumentTextProvider:
         )
         normalized = self.extraction_service.extract_from_bytes(plaintext, mime_type=document.mime_type)
         if normalized.extraction_method == EXTRACTION_METHOD_UNSUPPORTED:
-            raise DiscoveryOrchestrationError("Document format extraction is not supported")
+            raise UnsupportedDocumentExtractionError("Document format extraction is not supported")
         return normalized.text
 
 
@@ -150,6 +157,7 @@ class DiscoveryOrchestrator:
             )
 
             document_failures = 0
+            documents_skipped = 0
             findings_created = 0
             for document in documents:
                 tracking = DiscoveryScanDocument(
@@ -216,6 +224,28 @@ class DiscoveryOrchestrator:
                             "new_status": DISCOVERY_DOCUMENT_STATUS_COMPLETED,
                         },
                     )
+                except UnsupportedDocumentExtractionError:
+                    documents_skipped += 1
+                    tracking.status = DISCOVERY_DOCUMENT_STATUS_SKIPPED
+                    tracking.warning_code = DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION
+                    db.commit()
+                    self._audit(
+                        db,
+                        user_id,
+                        DISCOVERY_DOCUMENT_SKIPPED,
+                        "Discovery document skipped because extraction is unsupported",
+                        metadata={
+                            "resource_type": "discovery_scan_document",
+                            "resource_id": tracking.id,
+                            "scan_id": scan.id,
+                            "document_id": document.id,
+                            "discovery_scan_document_id": tracking.id,
+                            "event_type": DISCOVERY_DOCUMENT_SKIPPED,
+                            "old_status": DISCOVERY_DOCUMENT_STATUS_PROCESSING,
+                            "new_status": DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+                            "warning_code": DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
+                        },
+                    )
                 except Exception:
                     db.rollback()
                     document_failures += 1
@@ -247,6 +277,8 @@ class DiscoveryOrchestrator:
                 scan.status = DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
             elif document_failures:
                 scan.status = DISCOVERY_SCAN_STATUS_FAILED
+            elif documents_skipped:
+                scan.status = DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
             else:
                 scan.status = DISCOVERY_SCAN_STATUS_COMPLETE
             scan.completed_at = datetime.now(timezone.utc)
