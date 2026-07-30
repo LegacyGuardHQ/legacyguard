@@ -58,6 +58,27 @@ class DiscoveryScanExecutor:
     def process(self, db: Session, *, user_id: str, document_ids: list[str]) -> DiscoveryScan:
         return self.orchestrator.run_scan(db, user_id=user_id, document_ids=document_ids)
 
+    def create_pending(self, db: Session, *, user_id: str) -> DiscoveryScan:
+        return self.orchestrator.create_scan(db, user_id=user_id)
+
+    def process_existing(
+        self,
+        db: Session,
+        *,
+        scan_id: str,
+        user_id: str,
+        document_ids: list[str],
+    ) -> DiscoveryScan:
+        return self.orchestrator.process_scan(
+            db,
+            scan_id=scan_id,
+            user_id=user_id,
+            document_ids=document_ids,
+        )
+
+    def mark_failed(self, db: Session, *, scan_id: str, user_id: str) -> DiscoveryScan | None:
+        return self.orchestrator.mark_scan_failed(db, scan_id=scan_id, user_id=user_id)
+
 
 class DocumentTextProvider(Protocol):
     def get_text(self, document: Document) -> str:
@@ -109,7 +130,7 @@ class DiscoveryOrchestrator:
         self.text_provider = text_provider or EncryptedDocumentTextProvider()
         self.audit_logger = audit_logger
 
-    def run_scan(self, db: Session, *, user_id: str, document_ids: list[str]) -> DiscoveryScan:
+    def create_scan(self, db: Session, *, user_id: str) -> DiscoveryScan:
         scan = DiscoveryScan(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -134,6 +155,36 @@ class DiscoveryOrchestrator:
                 "new_status": DISCOVERY_SCAN_STATUS_PENDING,
             },
         )
+        return scan
+
+    def run_scan(self, db: Session, *, user_id: str, document_ids: list[str]) -> DiscoveryScan:
+        scan = self.create_scan(db, user_id=user_id)
+        return self.process_scan(
+            db,
+            scan_id=scan.id,
+            user_id=user_id,
+            document_ids=document_ids,
+        )
+
+    def process_scan(
+        self,
+        db: Session,
+        *,
+        scan_id: str,
+        user_id: str,
+        document_ids: list[str],
+    ) -> DiscoveryScan:
+        scan = (
+            db.query(DiscoveryScan)
+            .filter(
+                DiscoveryScan.id == scan_id,
+                DiscoveryScan.user_id == user_id,
+                DiscoveryScan.status == DISCOVERY_SCAN_STATUS_PENDING,
+            )
+            .first()
+        )
+        if scan is None:
+            raise DiscoveryOrchestrationError("Pending discovery scan not found")
 
         try:
             documents = self._get_owned_documents(db, user_id=user_id, document_ids=document_ids)
@@ -339,6 +390,39 @@ class DiscoveryOrchestrator:
                 },
             )
             raise DiscoveryOrchestrationError("Discovery scan failed") from exc
+
+    def mark_scan_failed(self, db: Session, *, scan_id: str, user_id: str) -> DiscoveryScan | None:
+        db.rollback()
+        scan = (
+            db.query(DiscoveryScan)
+            .filter(DiscoveryScan.id == scan_id, DiscoveryScan.user_id == user_id)
+            .first()
+        )
+        if scan is None:
+            return None
+        if scan.status not in {DISCOVERY_SCAN_STATUS_PENDING, DISCOVERY_SCAN_STATUS_RUNNING}:
+            return scan
+
+        old_scan_status = scan.status
+        scan.status = DISCOVERY_SCAN_STATUS_FAILED
+        scan.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(scan)
+        self._audit(
+            db,
+            user_id,
+            DISCOVERY_FAILED,
+            "Discovery scan failed",
+            metadata={
+                "resource_type": "discovery_scan",
+                "resource_id": scan.id,
+                "scan_id": scan.id,
+                "event_type": DISCOVERY_FAILED,
+                "old_status": old_scan_status,
+                "new_status": scan.status,
+            },
+        )
+        return scan
 
     def _get_owned_documents(self, db: Session, *, user_id: str, document_ids: list[str]) -> list[Document]:
         documents = db.query(Document).filter(Document.id.in_(document_ids), Document.user_id == user_id).all()

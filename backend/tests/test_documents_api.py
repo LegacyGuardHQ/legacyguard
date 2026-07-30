@@ -1,8 +1,10 @@
 import hashlib
 import os
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
+from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
@@ -16,9 +18,19 @@ from app.database.connection import SessionLocal
 from app.main import app
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
-from app.models.discovery import DiscoveryScan, EvidenceFinding
+from app.models.audit_log import AuditLog
+from app.models.discovery import (
+    DISCOVERY_SCAN_STATUS_COMPLETE,
+    DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
+    DISCOVERY_SCAN_STATUS_FAILED,
+    DISCOVERY_SCAN_STATUS_PENDING,
+    DiscoveryScan,
+    EvidenceFinding,
+)
 from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_FAILED,
     DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
@@ -458,39 +470,45 @@ def test_upload_triggers_discovery_scan_for_text_document() -> None:
     document_id = document.json()["id"]
     plaintext = b"retirement rollover account"
 
-    response = _upload_document(
-        token,
-        document_id,
-        content=plaintext,
-        filename="statement.txt",
-        mime_type="text/plain",
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["upload_status"] == "COMPLETED"
-    assert payload["discovery_scan"] is not None
-    assert payload["discovery_scan"]["status"] == "COMPLETE"
-    scan_id = payload["discovery_scan"]["scan_id"]
-
-    db = SessionLocal()
     try:
-        scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).one()
-        assert scan.user_id == client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
-        assert scan.documents_processed == 1
-        findings = db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan_id).all()
-        assert len(findings) >= 1
-        assert findings[0].document_id == document_id
-    finally:
-        db.close()
-        documents_api.document_storage.delete_permanently(document_id)
+        response = _upload_document(
+            token,
+            document_id,
+            content=plaintext,
+            filename="statement.txt",
+            mime_type="text/plain",
+        )
 
-    findings_response = client.get(
-        f"/discovery/scans/{scan_id}/findings",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert findings_response.status_code == 200
-    assert findings_response.json()["total_count"] >= 1
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["upload_status"] == "COMPLETED"
+        assert payload["discovery_scan"] is not None
+        assert payload["discovery_scan"]["status"] == DISCOVERY_SCAN_STATUS_PENDING
+        scan_id = payload["discovery_scan"]["scan_id"]
+
+        db = SessionLocal()
+        try:
+            scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).one()
+            assert scan.user_id == client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+            assert scan.status == DISCOVERY_SCAN_STATUS_COMPLETE
+            assert scan.documents_processed == 1
+            assert db.query(DiscoveryScan).count() == 1
+            findings = db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan_id).all()
+            assert len(findings) >= 1
+            assert findings[0].document_id == document_id
+            tracking = db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan_id).one()
+            assert tracking.document_id == document_id
+        finally:
+            db.close()
+
+        findings_response = client.get(
+            f"/discovery/scans/{scan_id}/findings",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert findings_response.status_code == 200
+        assert findings_response.json()["total_count"] >= 1
+    finally:
+        documents_api.document_storage.delete_permanently(document_id)
 
 
 def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
@@ -507,14 +525,14 @@ def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
         payload = response.json()
         assert payload["upload_status"] == "COMPLETED"
         assert payload["discovery_scan"] is not None
-        assert payload["discovery_scan"]["status"] == "COMPLETED_WITH_WARNINGS"
+        assert payload["discovery_scan"]["status"] == DISCOVERY_SCAN_STATUS_PENDING
 
         db = SessionLocal()
         try:
             saved = db.query(Document).filter(Document.id == document_id).one()
             assert saved.encryption_key_reference_encrypted is not None
             scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == payload["discovery_scan"]["scan_id"]).one()
-            assert scan.status == "COMPLETED_WITH_WARNINGS"
+            assert scan.status == DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
             assert scan.documents_processed == 0
             tracking = db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan.id).one()
             assert tracking.status == DISCOVERY_DOCUMENT_STATUS_SKIPPED
@@ -522,6 +540,250 @@ def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
         finally:
             db.close()
 
+        assert documents_api.document_storage.exists(document_id)
+    finally:
+        documents_api.document_storage.delete_permanently(document_id)
+
+
+def test_upload_schedules_discovery_without_running_it_inline(monkeypatch) -> None:
+    token = _token("upload-discovery-scheduled@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    scheduled: dict[str, object] = {}
+
+    def capture_task(self, func, *args, **kwargs):
+        scheduled.update({"func": func, "args": args, "kwargs": kwargs})
+
+    def fail_if_processed(*args, **kwargs):
+        raise AssertionError("discovery processing ran in the upload response path")
+
+    monkeypatch.setattr(BackgroundTasks, "add_task", capture_task)
+    monkeypatch.setattr(documents_api.discovery_scan_executor, "process_existing", fail_if_processed)
+
+    try:
+        response = _upload_document(
+            token,
+            document_id,
+            content=b"retirement rollover account",
+            filename="statement.txt",
+            mime_type="text/plain",
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["upload_status"] == "COMPLETED"
+        assert payload["discovery_scan"]["status"] == DISCOVERY_SCAN_STATUS_PENDING
+        assert scheduled["func"] is documents_api._process_discovery_scan_in_background
+        assert scheduled["args"] == (
+            payload["discovery_scan"]["scan_id"],
+            client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"],
+            document_id,
+        )
+        assert scheduled["kwargs"] == {}
+
+        db = SessionLocal()
+        try:
+            saved = db.query(Document).filter(Document.id == document_id).one()
+            assert saved.encryption_key_reference_encrypted is not None
+            scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == payload["discovery_scan"]["scan_id"]).one()
+            assert scan.status == DISCOVERY_SCAN_STATUS_PENDING
+            assert db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan.id).count() == 0
+        finally:
+            db.close()
+        assert documents_api.document_storage.exists(document_id)
+    finally:
+        documents_api.document_storage.delete_permanently(document_id)
+
+
+def test_background_discovery_uses_and_closes_fresh_session(monkeypatch) -> None:
+    request_session = object()
+
+    class TrackingSession:
+        def __init__(self) -> None:
+            self.closed = False
+            self.rolled_back = False
+
+        def close(self) -> None:
+            self.closed = True
+
+        def rollback(self) -> None:
+            self.rolled_back = True
+
+    background_session = TrackingSession()
+    processed: dict[str, object] = {}
+
+    monkeypatch.setattr(documents_api, "SessionLocal", lambda: background_session)
+
+    def process_existing(db, *, scan_id, user_id, document_ids):
+        processed.update(
+            {
+                "db": db,
+                "scan_id": scan_id,
+                "user_id": user_id,
+                "document_ids": document_ids,
+            }
+        )
+
+    monkeypatch.setattr(documents_api.discovery_scan_executor, "process_existing", process_existing)
+
+    documents_api._process_discovery_scan_in_background("scan-1", "user-1", "document-1")
+
+    assert processed == {
+        "db": background_session,
+        "scan_id": "scan-1",
+        "user_id": "user-1",
+        "document_ids": ["document-1"],
+    }
+    assert processed["db"] is not request_session
+    assert background_session.closed is True
+    assert background_session.rolled_back is False
+
+
+def test_background_discovery_closes_session_when_failure_recording_also_fails(monkeypatch) -> None:
+    class TrackingSession:
+        def __init__(self) -> None:
+            self.close_count = 0
+            self.rollback_count = 0
+
+        def close(self) -> None:
+            self.close_count += 1
+
+        def rollback(self) -> None:
+            self.rollback_count += 1
+
+    background_session = TrackingSession()
+    monkeypatch.setattr(documents_api, "SessionLocal", lambda: background_session)
+
+    def fail_processing(*args, **kwargs):
+        raise RuntimeError("processing failed")
+
+    def fail_recording(*args, **kwargs):
+        raise RuntimeError("failure recording failed")
+
+    monkeypatch.setattr(documents_api.discovery_scan_executor, "process_existing", fail_processing)
+    monkeypatch.setattr(documents_api.discovery_scan_executor, "mark_failed", fail_recording)
+
+    documents_api._process_discovery_scan_in_background("scan-1", "user-1", "document-1")
+
+    assert background_session.rollback_count == 2
+    assert background_session.close_count == 1
+
+
+def test_scheduling_failure_is_reraised_when_scan_failure_recording_also_fails(monkeypatch) -> None:
+    class TrackingSession:
+        def __init__(self) -> None:
+            self.rollback_count = 0
+
+        def rollback(self) -> None:
+            self.rollback_count += 1
+
+    class FailingBackgroundTasks:
+        def add_task(self, func, *args, **kwargs):
+            raise RuntimeError("scheduling failed")
+
+    db = TrackingSession()
+    scan = SimpleNamespace(id="scan-1", status=DISCOVERY_SCAN_STATUS_PENDING)
+    monkeypatch.setattr(documents_api.discovery_scan_executor, "create_pending", lambda *args, **kwargs: scan)
+
+    def fail_recording(*args, **kwargs):
+        raise RuntimeError("failure recording failed")
+
+    monkeypatch.setattr(documents_api.discovery_scan_executor, "mark_failed", fail_recording)
+
+    with pytest.raises(RuntimeError, match="scheduling failed"):
+        documents_api._trigger_discovery_scan_after_upload(
+            db,
+            FailingBackgroundTasks(),
+            user_id="user-1",
+            document_id="document-1",
+        )
+
+    assert db.rollback_count == 2
+
+
+def test_genuine_background_discovery_failure_does_not_break_upload(monkeypatch) -> None:
+    token = _token("upload-discovery-background-failure@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+
+    def fail_extraction(document):
+        raise RuntimeError("sensitive background failure text")
+
+    monkeypatch.setattr(documents_api.discovery_scan_executor.orchestrator.text_provider, "get_text", fail_extraction)
+
+    try:
+        response = _upload_document(
+            token,
+            document_id,
+            content=b"successfully persisted document content",
+            filename="statement.txt",
+            mime_type="text/plain",
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["upload_status"] == "COMPLETED"
+        assert payload["discovery_scan"]["status"] == DISCOVERY_SCAN_STATUS_PENDING
+
+        db = SessionLocal()
+        try:
+            saved = db.query(Document).filter(Document.id == document_id).one()
+            assert saved.encryption_key_reference_encrypted is not None
+            scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == payload["discovery_scan"]["scan_id"]).one()
+            assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
+            tracking = db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan.id).one()
+            assert tracking.status == DISCOVERY_DOCUMENT_STATUS_FAILED
+            assert tracking.warning_code == DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED
+            audit_text = " ".join(
+                f"{entry.details} {entry.event_metadata}"
+                for entry in db.query(AuditLog).filter(AuditLog.event_metadata.is_not(None)).all()
+            )
+            assert "sensitive background failure text" not in audit_text
+        finally:
+            db.close()
+        assert documents_api.document_storage.exists(document_id)
+    finally:
+        documents_api.document_storage.delete_permanently(document_id)
+
+
+def test_upload_survives_background_scheduling_failure(monkeypatch) -> None:
+    token = _token("upload-discovery-scheduling-failure@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    plaintext = b"successfully persisted despite scheduling failure"
+
+    def fail_scheduling(self, func, *args, **kwargs):
+        raise RuntimeError("simulated scheduling failure")
+
+    monkeypatch.setattr(BackgroundTasks, "add_task", fail_scheduling)
+
+    try:
+        response = _upload_document(
+            token,
+            document_id,
+            content=plaintext,
+            filename="statement.txt",
+            mime_type="text/plain",
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["upload_status"] == "COMPLETED"
+        assert payload["discovery_scan"] is None
+
+        db = SessionLocal()
+        try:
+            saved = db.query(Document).filter(Document.id == document_id).one()
+            assert saved.checksum_sha256 == hashlib.sha256(plaintext).hexdigest()
+            assert saved.encryption_key_reference_encrypted is not None
+            scan = db.query(DiscoveryScan).one()
+            assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
+            assert scan.completed_at is not None
+        finally:
+            db.close()
         assert documents_api.document_storage.exists(document_id)
     finally:
         documents_api.document_storage.delete_permanently(document_id)

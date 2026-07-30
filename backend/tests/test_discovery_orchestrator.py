@@ -14,6 +14,7 @@ from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETE,
     DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
     DISCOVERY_SCAN_STATUS_FAILED,
+    DISCOVERY_SCAN_STATUS_PENDING,
     DiscoveryScan,
     EvidenceFinding,
 )
@@ -111,6 +112,76 @@ def test_orchestrator_creates_discovery_scan() -> None:
 
         assert scan.status == DISCOVERY_SCAN_STATUS_COMPLETE
         assert scan.documents_processed == 1
+    finally:
+        db.close()
+
+
+def test_orchestrator_processes_precreated_scan_without_creating_duplicate() -> None:
+    _user_id, document_id = _create_user_and_document()
+    text_provider = FakeTextProvider()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=text_provider,
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+
+        pending_scan = orchestrator.create_scan(db, user_id="user-1")
+
+        assert pending_scan.status == DISCOVERY_SCAN_STATUS_PENDING
+        assert text_provider.called is False
+        assert db.query(DiscoveryScan).count() == 1
+
+        completed_scan = orchestrator.process_scan(
+            db,
+            scan_id=pending_scan.id,
+            user_id="user-1",
+            document_ids=[document_id],
+        )
+
+        assert completed_scan.id == pending_scan.id
+        assert completed_scan.status == DISCOVERY_SCAN_STATUS_COMPLETE
+        assert completed_scan.documents_processed == 1
+        assert text_provider.called is True
+        assert db.query(DiscoveryScan).count() == 1
+        assert db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == pending_scan.id).count() == 1
+    finally:
+        db.close()
+
+
+def test_orchestrator_rejects_processing_a_nonpending_scan() -> None:
+    _user_id, document_id = _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+
+        with pytest.raises(DiscoveryOrchestrationError, match="Pending discovery scan not found"):
+            orchestrator.process_scan(
+                db,
+                scan_id="missing-scan",
+                user_id="user-1",
+                document_ids=[document_id],
+            )
+    finally:
+        db.close()
+
+
+def test_mark_scan_failed_returns_none_for_unknown_scan() -> None:
+    _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+
+        assert orchestrator.mark_scan_failed(db, scan_id="missing-scan", user_id="user-1") is None
     finally:
         db.close()
 
