@@ -1,3 +1,4 @@
+import hashlib
 import os
 from datetime import datetime, timezone
 
@@ -510,4 +511,46 @@ def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
         assert scan.status == "FAILED"
     finally:
         db.close()
+        documents_api.document_storage.delete_permanently(document_id)
+
+
+def test_upload_still_succeeds_when_post_upload_discovery_raises(monkeypatch) -> None:
+    token = _token("upload-discovery-failure@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    plaintext = b"successfully persisted document content"
+
+    def fail_discovery(*args, **kwargs):
+        raise RuntimeError("simulated post-upload discovery failure")
+
+    monkeypatch.setattr(documents_api, "_trigger_discovery_scan_after_upload", fail_discovery)
+
+    try:
+        response = _upload_document(
+            token,
+            document_id,
+            content=plaintext,
+            filename="statement.txt",
+            mime_type="text/plain",
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["upload_status"] == "COMPLETED"
+        assert payload["discovery_scan"] is None
+
+        db = SessionLocal()
+        try:
+            saved = db.query(Document).filter(Document.id == document_id).one()
+            assert saved.checksum_sha256 == hashlib.sha256(plaintext).hexdigest()
+            assert saved.encryption_key_reference_encrypted is not None
+            assert saved.original_filename == "statement.txt"
+            assert saved.mime_type == "text/plain"
+            assert saved.file_size == len(plaintext)
+        finally:
+            db.close()
+
+        assert documents_api.document_storage.exists(document_id)
+    finally:
         documents_api.document_storage.delete_permanently(document_id)
