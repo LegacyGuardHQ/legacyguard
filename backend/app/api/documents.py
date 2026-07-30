@@ -2,15 +2,14 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.database.connection import SessionLocal
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
 from app.models.document import DOCUMENT_STATUS_ACTIVE, DOCUMENT_VERIFICATION_UNKNOWN, Document
 from app.models.user import User
-from app.models.discovery import DiscoveryScan
-from app.models.discovery_scan_document import DiscoveryScanDocument
 from app.schemas.documents import (
     DocumentCreate,
     DocumentListResponse,
@@ -19,7 +18,7 @@ from app.schemas.documents import (
     DocumentUploadResponse,
 )
 from app.security.auth import get_current_user, get_db
-from app.services.discovery_orchestrator import DiscoveryOrchestrationError, DiscoveryOrchestrator, DiscoveryScanExecutor
+from app.services.discovery_orchestrator import DiscoveryOrchestrator, DiscoveryScanExecutor
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
 from app.services.document_storage import DocumentStorageError, LocalDocumentStorage
 from app.services.document_validation import (
@@ -96,26 +95,62 @@ def _get_owned_document(db: Session, document_id: str, user_id: str) -> Document
 
 def _trigger_discovery_scan_after_upload(
     db: Session,
+    background_tasks: BackgroundTasks,
     *,
     user_id: str,
     document_id: str,
 ) -> DocumentUploadDiscoveryScanResponse | None:
+    scan = discovery_scan_executor.create_pending(db, user_id=user_id)
     try:
-        scan = discovery_scan_executor.process(db, user_id=user_id, document_ids=[document_id])
-    except DiscoveryOrchestrationError:
-        scan = (
-            db.query(DiscoveryScan)
-            .join(DiscoveryScanDocument, DiscoveryScanDocument.scan_id == DiscoveryScan.id)
-            .filter(
-                DiscoveryScan.user_id == user_id,
-                DiscoveryScanDocument.document_id == document_id,
-            )
-            .order_by(DiscoveryScan.created_at.desc())
-            .first()
+        background_tasks.add_task(
+            _process_discovery_scan_in_background,
+            scan.id,
+            user_id,
+            document_id,
         )
-        if scan is None:
-            return None
+    except Exception:
+        db.rollback()
+        try:
+            discovery_scan_executor.mark_failed(db, scan_id=scan.id, user_id=user_id)
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to mark unscheduled discovery scan as failed",
+                extra={"scan_id": scan.id, "user_id": user_id},
+            )
+        raise
     return DocumentUploadDiscoveryScanResponse(scan_id=scan.id, status=scan.status)
+
+
+def _process_discovery_scan_in_background(scan_id: str, user_id: str, document_id: str) -> None:
+    db: Session | None = None
+    try:
+        db = SessionLocal()
+        discovery_scan_executor.process_existing(
+            db,
+            scan_id=scan_id,
+            user_id=user_id,
+            document_ids=[document_id],
+        )
+    except Exception:
+        if db is not None:
+            db.rollback()
+        logger.exception(
+            "Background discovery processing failed",
+            extra={"scan_id": scan_id, "user_id": user_id},
+        )
+        if db is not None:
+            try:
+                discovery_scan_executor.mark_failed(db, scan_id=scan_id, user_id=user_id)
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "Failed to record background discovery failure",
+                    extra={"scan_id": scan_id, "user_id": user_id},
+                )
+    finally:
+        if db is not None:
+            db.close()
 
 
 def _validate_document_upload_lifecycle(db: Session, document: Document, user_id: str) -> None:
@@ -195,6 +230,7 @@ def get_document_metadata(
 @router.post("/{document_id}/upload", response_model=DocumentUploadResponse)
 async def upload_encrypted_document_content(
     document_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -245,6 +281,7 @@ async def upload_encrypted_document_content(
     try:
         discovery_scan = _trigger_discovery_scan_after_upload(
             db,
+            background_tasks,
             user_id=current_user.id,
             document_id=document.id,
         )
