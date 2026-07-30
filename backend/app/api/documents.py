@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -31,6 +32,7 @@ from app.services.document_validation import (
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+logger = logging.getLogger(__name__)
 document_storage = LocalDocumentStorage()
 malware_scanner: MalwareScanner | None = None
 discovery_scan_executor = DiscoveryScanExecutor(DiscoveryOrchestrator())
@@ -240,11 +242,19 @@ async def upload_encrypted_document_content(
                 pass
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
 
-    discovery_scan = _trigger_discovery_scan_after_upload(
-        db,
-        user_id=current_user.id,
-        document_id=document.id,
-    )
+    try:
+        discovery_scan = _trigger_discovery_scan_after_upload(
+            db,
+            user_id=current_user.id,
+            document_id=document.id,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Post-upload discovery processing failed",
+            extra={"document_id": document.id, "user_id": current_user.id},
+        )
+        discovery_scan = None
 
     return DocumentUploadResponse(
         id=document.id,
