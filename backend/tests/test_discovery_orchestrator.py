@@ -10,10 +10,25 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.database.connection import Base, SessionLocal, engine
-from app.models.discovery import DISCOVERY_SCAN_STATUS_COMPLETE, DISCOVERY_SCAN_STATUS_FAILED, DiscoveryScan, EvidenceFinding
+from app.models.discovery import (
+    DISCOVERY_SCAN_STATUS_COMPLETE,
+    DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
+    DISCOVERY_SCAN_STATUS_FAILED,
+    DiscoveryScan,
+    EvidenceFinding,
+)
+from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
+    DiscoveryScanDocument,
+)
 from app.models.document import Document
 from app.models.user import User
-from app.services.discovery_orchestrator import DiscoveryOrchestrationError, DiscoveryOrchestrator
+from app.services.discovery_orchestrator import (
+    DiscoveryOrchestrationError,
+    DiscoveryOrchestrator,
+    UnsupportedDocumentExtractionError,
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +46,11 @@ class FakeTextProvider:
     def get_text(self, document: Document) -> str:
         self.called = True
         return self.text
+
+
+class UnsupportedTextProvider:
+    def get_text(self, document: Document) -> str:
+        raise UnsupportedDocumentExtractionError("Document format extraction is not supported")
 
 
 class FakeDiscoveryEngine:
@@ -212,6 +232,28 @@ def test_orchestrator_tracks_completed_document() -> None:
         assert tracked.document_id == document_id
         assert tracked.status == DISCOVERY_DOCUMENT_STATUS_COMPLETED
         assert tracked.warning_code is None
+    finally:
+        db.close()
+
+
+def test_orchestrator_tracks_unsupported_document_as_skipped() -> None:
+    _user_id, document_id = _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=UnsupportedTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+
+        scan = orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+
+        assert scan.status == DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
+        assert scan.documents_processed == 0
+        tracked = db.query(DiscoveryScanDocument).one()
+        assert tracked.status == DISCOVERY_DOCUMENT_STATUS_SKIPPED
+        assert tracked.warning_code == DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION
+        assert db.query(EvidenceFinding).count() == 0
     finally:
         db.close()
 
