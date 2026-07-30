@@ -789,6 +789,56 @@ def test_upload_survives_background_scheduling_failure(monkeypatch) -> None:
         documents_api.document_storage.delete_permanently(document_id)
 
 
+def test_upload_survives_scan_creation_audit_failure_without_scheduling(monkeypatch) -> None:
+    token = _token("upload-discovery-audit-failure@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    plaintext = b"successfully persisted despite discovery audit failure"
+    scheduled = {"called": False}
+
+    def fail_audit(*args, **kwargs):
+        raise RuntimeError("simulated discovery audit failure")
+
+    def capture_scheduling(self, func, *args, **kwargs):
+        scheduled["called"] = True
+
+    monkeypatch.setattr(documents_api.discovery_scan_executor.orchestrator, "_audit", fail_audit)
+    monkeypatch.setattr(BackgroundTasks, "add_task", capture_scheduling)
+
+    try:
+        response = _upload_document(
+            token,
+            document_id,
+            content=plaintext,
+            filename="statement.txt",
+            mime_type="text/plain",
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["upload_status"] == "COMPLETED"
+        assert payload["discovery_scan"] is None
+        assert scheduled["called"] is False
+
+        db = SessionLocal()
+        try:
+            saved = db.query(Document).filter(Document.id == document_id).one()
+            assert saved.checksum_sha256 == hashlib.sha256(plaintext).hexdigest()
+            assert saved.encryption_key_reference_encrypted is not None
+            assert saved.original_filename == "statement.txt"
+            assert saved.mime_type == "text/plain"
+            assert saved.file_size == len(plaintext)
+            scan = db.query(DiscoveryScan).one()
+            assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
+            assert scan.completed_at is not None
+        finally:
+            db.close()
+        assert documents_api.document_storage.exists(document_id)
+    finally:
+        documents_api.document_storage.delete_permanently(document_id)
+
+
 def test_upload_still_succeeds_when_post_upload_discovery_raises(monkeypatch) -> None:
     token = _token("upload-discovery-failure@example.com")
     document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)

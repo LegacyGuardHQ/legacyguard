@@ -142,19 +142,27 @@ class DiscoveryOrchestrator:
         db.add(scan)
         db.commit()
         db.refresh(scan)
-        self._audit(
-            db,
-            user_id,
-            DISCOVERY_STARTED,
-            "Discovery scan created",
-            metadata={
-                "resource_type": "discovery_scan",
-                "resource_id": scan.id,
-                "scan_id": scan.id,
-                "event_type": DISCOVERY_STARTED,
-                "new_status": DISCOVERY_SCAN_STATUS_PENDING,
-            },
-        )
+        try:
+            self._audit(
+                db,
+                user_id,
+                DISCOVERY_STARTED,
+                "Discovery scan created",
+                metadata={
+                    "resource_type": "discovery_scan",
+                    "resource_id": scan.id,
+                    "scan_id": scan.id,
+                    "event_type": DISCOVERY_STARTED,
+                    "new_status": DISCOVERY_SCAN_STATUS_PENDING,
+                },
+            )
+        except Exception as exc:
+            db.rollback()
+            try:
+                self.mark_scan_failed(db, scan_id=scan.id, user_id=user_id)
+            except Exception:
+                db.rollback()
+            raise DiscoveryOrchestrationError("Discovery scan creation failed") from exc
         return scan
 
     def run_scan(self, db: Session, *, user_id: str, document_ids: list[str]) -> DiscoveryScan:
@@ -174,24 +182,33 @@ class DiscoveryOrchestrator:
         user_id: str,
         document_ids: list[str],
     ) -> DiscoveryScan:
-        scan = (
+        started_at = datetime.now(timezone.utc)
+        claimed_rows = (
             db.query(DiscoveryScan)
             .filter(
                 DiscoveryScan.id == scan_id,
                 DiscoveryScan.user_id == user_id,
                 DiscoveryScan.status == DISCOVERY_SCAN_STATUS_PENDING,
             )
-            .first()
+            .update(
+                {
+                    DiscoveryScan.status: DISCOVERY_SCAN_STATUS_RUNNING,
+                    DiscoveryScan.started_at: started_at,
+                },
+                synchronize_session=False,
+            )
         )
-        if scan is None:
-            raise DiscoveryOrchestrationError("Pending discovery scan not found")
+        if claimed_rows != 1:
+            db.rollback()
+            existing_scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).first()
+            if existing_scan is None or existing_scan.user_id != user_id:
+                raise DiscoveryOrchestrationError("Discovery scan not found")
+            raise DiscoveryOrchestrationError("Discovery scan is not pending")
+        db.commit()
+        scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id, DiscoveryScan.user_id == user_id).one()
 
         try:
             documents = self._get_owned_documents(db, user_id=user_id, document_ids=document_ids)
-            old_scan_status = scan.status
-            scan.status = DISCOVERY_SCAN_STATUS_RUNNING
-            scan.started_at = datetime.now(timezone.utc)
-            db.commit()
             self._audit(
                 db,
                 user_id,
@@ -202,7 +219,7 @@ class DiscoveryOrchestrator:
                     "resource_id": scan.id,
                     "scan_id": scan.id,
                     "event_type": DISCOVERY_STARTED,
-                    "old_status": old_scan_status,
+                    "old_status": DISCOVERY_SCAN_STATUS_PENDING,
                     "new_status": scan.status,
                 },
             )
@@ -370,25 +387,10 @@ class DiscoveryOrchestrator:
             return scan
         except Exception as exc:
             db.rollback()
-            scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan.id).one()
-            old_scan_status = scan.status
-            scan.status = DISCOVERY_SCAN_STATUS_FAILED
-            scan.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            self._audit(
-                db,
-                user_id,
-                DISCOVERY_FAILED,
-                "Discovery scan failed",
-                metadata={
-                    "resource_type": "discovery_scan",
-                    "resource_id": scan.id,
-                    "scan_id": scan.id,
-                    "event_type": DISCOVERY_FAILED,
-                    "old_status": old_scan_status,
-                    "new_status": scan.status,
-                },
-            )
+            try:
+                self.mark_scan_failed(db, scan_id=scan_id, user_id=user_id)
+            except Exception:
+                db.rollback()
             raise DiscoveryOrchestrationError("Discovery scan failed") from exc
 
     def mark_scan_failed(self, db: Session, *, scan_id: str, user_id: str) -> DiscoveryScan | None:
