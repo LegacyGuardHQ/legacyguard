@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from unittest.mock import Mock
 
 import pytest
 
@@ -10,6 +11,7 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.database.connection import Base, SessionLocal, engine
+from app.models.audit_log import AuditLog
 from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETE,
     DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
@@ -19,13 +21,21 @@ from app.models.discovery import (
     EvidenceFinding,
 )
 from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_FAILED,
     DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
 from app.models.document import Document
 from app.models.user import User
 from app.services.discovery_orchestrator import (
+    DISCOVERY_COMPLETED,
+    DISCOVERY_DOCUMENT_COMPLETED,
+    DISCOVERY_DOCUMENT_SKIPPED,
+    DISCOVERY_FAILED,
+    DISCOVERY_STARTED,
+    EVIDENCE_FINDING_CREATED,
     DiscoveryOrchestrationError,
     DiscoveryOrchestrator,
     UnsupportedDocumentExtractionError,
@@ -61,6 +71,14 @@ class FakeDiscoveryEngine:
     def analyze_text(self, document_text: str) -> list[FakeCandidate]:
         self.called = True
         return [FakeCandidate(category="RETIREMENT_INDICATOR", matched_terms=["retirement"], confidence_score=85)]
+
+
+class TwoCandidateDiscoveryEngine:
+    def analyze_text(self, document_text: str) -> list[FakeCandidate]:
+        return [
+            FakeCandidate(category="RETIREMENT_INDICATOR", matched_terms=["retirement"], confidence_score=85),
+            FakeCandidate(category="INSURANCE_INDICATOR", matched_terms=["policy"], confidence_score=80),
+        ]
 
 
 class FailingDiscoveryEngine:
@@ -374,14 +392,19 @@ def test_orchestrator_tracks_unsupported_document_as_skipped() -> None:
     finally:
         db.close()
 
+    verification_db = SessionLocal()
+    try:
+        assert verification_db.query(AuditLog).filter(
+            AuditLog.event_type == DISCOVERY_DOCUMENT_SKIPPED
+        ).count() == 1
+        assert verification_db.query(AuditLog).filter(
+            AuditLog.event_type == DISCOVERY_COMPLETED
+        ).count() == 1
+    finally:
+        verification_db.close()
+
 
 def test_orchestrator_tracks_failed_document_without_raw_error() -> None:
-    from app.models.discovery_scan_document import (
-        DISCOVERY_DOCUMENT_STATUS_FAILED,
-        DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
-        DiscoveryScanDocument,
-    )
-
     _user_id, document_id = _create_user_and_document()
     db = SessionLocal()
     try:
@@ -400,3 +423,102 @@ def test_orchestrator_tracks_failed_document_without_raw_error() -> None:
         assert "sensitive internal failure" not in tracked.warning_code
     finally:
         db.close()
+
+
+def test_orchestrator_explicitly_persists_checkpoint_audits() -> None:
+    _user_id, document_id = _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+        scan = orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+        scan_id = scan.id
+    finally:
+        db.close()
+
+    verification_db = SessionLocal()
+    try:
+        event_types = [
+            audit.event_type
+            for audit in verification_db.query(AuditLog)
+            .filter(AuditLog.user_id == "user-1")
+            .order_by(AuditLog.timestamp.asc(), AuditLog.id.asc())
+            .all()
+        ]
+        assert event_types.count(DISCOVERY_STARTED) == 2
+        assert EVIDENCE_FINDING_CREATED in event_types
+        assert DISCOVERY_DOCUMENT_COMPLETED in event_types
+        assert DISCOVERY_COMPLETED in event_types
+        assert verification_db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan_id).count() == 1
+    finally:
+        verification_db.close()
+
+
+def test_audit_failure_during_document_processing_does_not_persist_partial_findings() -> None:
+    _user_id, document_id = _create_user_and_document()
+    finding_audits = 0
+
+    def fail_second_finding_audit(db, user_id, event_type, details):
+        nonlocal finding_audits
+        if event_type == EVIDENCE_FINDING_CREATED:
+            finding_audits += 1
+            if finding_audits == 2:
+                raise RuntimeError("simulated audit failure")
+
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=TwoCandidateDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+            audit_logger=fail_second_finding_audit,
+        )
+
+        with pytest.raises(DiscoveryOrchestrationError):
+            orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+    finally:
+        db.close()
+
+    verification_db = SessionLocal()
+    try:
+        scan = verification_db.query(DiscoveryScan).one()
+        tracking = verification_db.query(DiscoveryScanDocument).one()
+        assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
+        assert tracking.status == DISCOVERY_DOCUMENT_STATUS_FAILED
+        assert verification_db.query(EvidenceFinding).count() == 0
+    finally:
+        verification_db.close()
+
+
+def test_mark_scan_failed_does_not_rollback_the_caller_session(monkeypatch) -> None:
+    _user_id, _document_id = _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+        scan = orchestrator.create_scan(db, user_id="user-1")
+        user = db.query(User).filter(User.id == "user-1").one()
+        user.email = "preserved@example.com"
+        rollback = Mock(wraps=db.rollback)
+        monkeypatch.setattr(db, "rollback", rollback)
+
+        failed_scan = orchestrator.mark_scan_failed(db, scan_id=scan.id, user_id="user-1")
+
+        assert failed_scan is not None
+        assert failed_scan.status == DISCOVERY_SCAN_STATUS_FAILED
+        rollback.assert_not_called()
+    finally:
+        db.close()
+
+    verification_db = SessionLocal()
+    try:
+        assert verification_db.query(User).filter(User.id == "user-1").one().email == "preserved@example.com"
+        assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_FAILED).count() == 1
+    finally:
+        verification_db.close()

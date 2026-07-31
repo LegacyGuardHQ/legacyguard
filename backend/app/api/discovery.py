@@ -323,6 +323,19 @@ def create_asset_from_discovery_finding(
         user_id=current_user.id,
     ))
     try:
+        log_event(
+            db,
+            user_id=current_user.id,
+            event_type="asset_created_from_finding",
+            details="Asset manually created from confirmed discovery finding",
+            metadata={
+                "resource_type": "asset",
+                "resource_id": asset.id,
+                "asset_id": asset.id,
+                "finding_id": finding.id,
+                "event_type": "asset_created_from_finding",
+            },
+        )
         db.commit()
         db.refresh(asset)
     except IntegrityError as exc:
@@ -331,19 +344,6 @@ def create_asset_from_discovery_finding(
             status_code=status.HTTP_409_CONFLICT,
             detail="An asset has already been created from this finding",
         ) from exc
-    log_event(
-        db,
-        user_id=current_user.id,
-        event_type="asset_created_from_finding",
-        details="Asset manually created from confirmed discovery finding",
-        metadata={
-            "resource_type": "asset",
-            "resource_id": asset.id,
-            "asset_id": asset.id,
-            "finding_id": finding.id,
-            "event_type": "asset_created_from_finding",
-        },
-    )
     return _asset_response(asset)
 
 
@@ -364,8 +364,6 @@ def review_discovery_finding(
 
     event_type = _review_event_type(old_status, payload.review_status)
     finding.review_status = payload.review_status
-    db.commit()
-    db.refresh(finding)
     log_event(
         db,
         user_id=current_user.id,
@@ -380,4 +378,6 @@ def review_discovery_finding(
             "new_status": finding.review_status,
         },
     )
+    db.commit()
+    db.refresh(finding)
     return _finding_response(finding)

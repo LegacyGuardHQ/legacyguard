@@ -111,8 +111,9 @@ class EncryptedDocumentTextProvider:
         return normalized.text
 
 
-# Existing tests and integrations provide a simple four-argument callback. The
-# built-in audit service is used when no callback is supplied.
+# Existing tests and integrations provide a simple four-argument callback. Audit
+# callbacks may add or flush rows but must not commit, roll back, or close the
+# caller-owned session. The built-in audit service is used when none is supplied.
 AuditLogger = Callable[[Session, str, str, str], None]
 
 
@@ -156,6 +157,7 @@ class DiscoveryOrchestrator:
                     "new_status": DISCOVERY_SCAN_STATUS_PENDING,
                 },
             )
+            db.commit()
         except Exception as exc:
             db.rollback()
             try:
@@ -223,11 +225,13 @@ class DiscoveryOrchestrator:
                     "new_status": scan.status,
                 },
             )
+            db.commit()
 
             document_failures = 0
             documents_skipped = 0
             findings_created = 0
             for document in documents:
+                document_findings_created = 0
                 tracking = DiscoveryScanDocument(
                     id=str(uuid.uuid4()),
                     scan_id=scan.id,
@@ -257,7 +261,7 @@ class DiscoveryOrchestrator:
                         finding.set_matched_terms(json.dumps(privacy_result.sanitized_terms))
                         finding.set_evidence_excerpt(privacy_result.sanitized_excerpt)
                         db.add(finding)
-                        findings_created += 1
+                        document_findings_created += 1
                         self._audit(
                             db,
                             user_id,
@@ -275,7 +279,6 @@ class DiscoveryOrchestrator:
                     tracking.status = DISCOVERY_DOCUMENT_STATUS_COMPLETED
                     tracking.warning_code = None
                     scan.documents_processed += 1
-                    db.commit()
                     self._audit(
                         db,
                         user_id,
@@ -292,6 +295,8 @@ class DiscoveryOrchestrator:
                             "new_status": DISCOVERY_DOCUMENT_STATUS_COMPLETED,
                         },
                     )
+                    db.commit()
+                    findings_created += document_findings_created
                 except UnsupportedDocumentExtractionError:
                     documents_skipped += 1
                     tracking.status = DISCOVERY_DOCUMENT_STATUS_SKIPPED
@@ -314,6 +319,7 @@ class DiscoveryOrchestrator:
                             "warning_code": DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
                         },
                     )
+                    db.commit()
                 except Exception:
                     db.rollback()
                     document_failures += 1
@@ -337,6 +343,7 @@ class DiscoveryOrchestrator:
                             "new_status": DISCOVERY_DOCUMENT_STATUS_FAILED,
                         },
                     )
+                    db.commit()
 
             old_scan_status = scan.status
             if document_failures and scan.documents_processed == 0:
@@ -368,6 +375,7 @@ class DiscoveryOrchestrator:
                         "new_status": scan.status,
                     },
                 )
+                db.commit()
                 raise DiscoveryOrchestrationError("Discovery scan failed")
 
             self._audit(
@@ -384,6 +392,7 @@ class DiscoveryOrchestrator:
                     "new_status": scan.status,
                 },
             )
+            db.commit()
             return scan
         except Exception as exc:
             db.rollback()
@@ -394,7 +403,11 @@ class DiscoveryOrchestrator:
             raise DiscoveryOrchestrationError("Discovery scan failed") from exc
 
     def mark_scan_failed(self, db: Session, *, scan_id: str, user_id: str) -> DiscoveryScan | None:
-        db.rollback()
+        """Persist failure using a usable caller-owned session.
+
+        Callers recovering from a failed transaction must roll back before
+        invoking this method.
+        """
         scan = (
             db.query(DiscoveryScan)
             .filter(DiscoveryScan.id == scan_id, DiscoveryScan.user_id == user_id)
@@ -424,6 +437,7 @@ class DiscoveryOrchestrator:
                 "new_status": scan.status,
             },
         )
+        db.commit()
         return scan
 
     def _get_owned_documents(self, db: Session, *, user_id: str, document_ids: list[str]) -> list[Document]:

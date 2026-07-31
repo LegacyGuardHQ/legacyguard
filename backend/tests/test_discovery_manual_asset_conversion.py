@@ -10,6 +10,7 @@ os.environ.setdefault("ENCRYPTION_KEY", "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWF
 os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
+from app.api import discovery as discovery_api
 from app.database.connection import SessionLocal
 from app.main import app
 from app.models.asset import ASSET_VERIFICATION_NEEDS_REVIEW, Asset
@@ -23,6 +24,7 @@ from app.models.discovery import (
     EvidenceFinding,
 )
 from app.services.rate_limit import rate_limiter
+from app.services.audit import log_event as add_audit_event
 
 client = TestClient(app)
 
@@ -285,3 +287,33 @@ def test_conversion_payload_cannot_claim_asset_is_verified() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_conversion_and_audit_roll_back_together_on_precommit_failure(monkeypatch) -> None:
+    token = _token("conversion-rollback@example.com")
+    finding_id = _create_finding(
+        _user_id(token),
+        finding_id="finding-conversion-rollback",
+        review_status=EVIDENCE_REVIEW_STATUS_CONFIRMED,
+    )
+
+    def fail_after_audit_flush(*args, **kwargs):
+        add_audit_event(*args, **kwargs)
+        raise RuntimeError("simulated precommit failure")
+
+    monkeypatch.setattr(discovery_api, "log_event", fail_after_audit_flush)
+
+    with pytest.raises(RuntimeError, match="simulated precommit failure"):
+        client.post(
+            f"/discovery/findings/{finding_id}/assets",
+            headers={"Authorization": f"Bearer {token}"},
+            json=_payload(),
+        )
+
+    db = SessionLocal()
+    try:
+        assert db.query(Asset).count() == 0
+        assert db.query(DiscoveryFindingAssetLink).count() == 0
+        assert db.query(AuditLog).filter(AuditLog.event_type == "asset_created_from_finding").count() == 0
+    finally:
+        db.close()

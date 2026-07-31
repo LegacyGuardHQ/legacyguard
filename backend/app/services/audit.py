@@ -51,6 +51,10 @@ def log_event(
     request: Optional[Request] = None,
     metadata: Mapping[str, Any] | None = None,
 ) -> None:
+    """Add an audit row to the caller's transaction.
+
+    The caller owns commit, rollback, and session closure.
+    """
     ip_address = None
     if request is not None:
         ip_address = request.client.host if request.client else None
@@ -65,4 +69,4 @@ def log_event(
         event_metadata=_sanitize_metadata(metadata),
     )
     db.add(audit_entry)
-    db.commit()
+    db.flush()
