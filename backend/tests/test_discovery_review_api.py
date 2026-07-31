@@ -10,11 +10,13 @@ os.environ.setdefault("ENCRYPTION_KEY", "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWF
 os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
+from app.api import discovery as discovery_api
 from app.database.connection import SessionLocal
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.discovery import EVIDENCE_REVIEW_STATUS_CONFIRMED, EVIDENCE_REVIEW_STATUS_DISMISSED, EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, DiscoveryScan, EvidenceFinding
 from app.services.rate_limit import rate_limiter
+from app.services.audit import log_event as add_audit_event
 
 client = TestClient(app)
 
@@ -250,5 +252,31 @@ def test_review_status_changes_do_not_create_assets() -> None:
     db = SessionLocal()
     try:
         assert db.query(Asset).count() == 0
+    finally:
+        db.close()
+
+
+def test_review_mutation_and_audit_roll_back_together_on_precommit_failure(monkeypatch) -> None:
+    token = _token("review-rollback@example.com")
+    finding_id = _create_finding(_user_id(token), "finding-review-rollback")
+
+    def fail_after_audit_flush(*args, **kwargs):
+        add_audit_event(*args, **kwargs)
+        raise RuntimeError("simulated precommit failure")
+
+    monkeypatch.setattr(discovery_api, "log_event", fail_after_audit_flush)
+
+    with pytest.raises(RuntimeError, match="simulated precommit failure"):
+        client.patch(
+            f"/discovery/findings/{finding_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"review_status": EVIDENCE_REVIEW_STATUS_CONFIRMED},
+        )
+
+    db = SessionLocal()
+    try:
+        finding = db.query(EvidenceFinding).filter(EvidenceFinding.id == finding_id).one()
+        assert finding.review_status == EVIDENCE_REVIEW_STATUS_PENDING_REVIEW
+        assert db.query(AuditLog).filter(AuditLog.event_type == "finding_reviewed").count() == 0
     finally:
         db.close()
