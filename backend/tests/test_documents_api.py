@@ -24,6 +24,7 @@ from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
     DISCOVERY_SCAN_STATUS_FAILED,
     DISCOVERY_SCAN_STATUS_PENDING,
+    DISCOVERY_SCAN_STATUS_RUNNING,
     DiscoveryScan,
     EvidenceFinding,
 )
@@ -35,6 +36,7 @@ from app.models.discovery_scan_document import (
     DiscoveryScanDocument,
 )
 from app.models.document import Document
+from app.services.discovery_orchestrator import DISCOVERY_FAILED
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -640,6 +642,51 @@ def test_background_discovery_uses_and_closes_fresh_session(monkeypatch) -> None
     assert background_session.rolled_back is False
 
 
+def test_losing_duplicate_background_invocation_does_not_fail_running_scan() -> None:
+    token = _token("duplicate-background-discovery@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    user_id = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+
+    db = SessionLocal()
+    try:
+        scan = documents_api.discovery_scan_executor.create_pending(db, user_id=user_id)
+        scan_id = scan.id
+        claimed_rows = (
+            db.query(DiscoveryScan)
+            .filter(
+                DiscoveryScan.id == scan_id,
+                DiscoveryScan.user_id == user_id,
+                DiscoveryScan.status == DISCOVERY_SCAN_STATUS_PENDING,
+            )
+            .update(
+                {
+                    DiscoveryScan.status: DISCOVERY_SCAN_STATUS_RUNNING,
+                    DiscoveryScan.started_at: datetime.now(timezone.utc),
+                },
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+        assert claimed_rows == 1
+        failure_audits_before = db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_FAILED).count()
+    finally:
+        db.close()
+
+    documents_api._process_discovery_scan_in_background(scan_id, user_id, document_id)
+
+    verification_db = SessionLocal()
+    try:
+        persisted_scan = verification_db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).one()
+        assert persisted_scan.status == DISCOVERY_SCAN_STATUS_RUNNING
+        assert verification_db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan_id).count() == 0
+        assert verification_db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan_id).count() == 0
+        assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_FAILED).count() == failure_audits_before
+    finally:
+        verification_db.close()
+
+
 def test_background_discovery_closes_session_when_failure_recording_also_fails(monkeypatch) -> None:
     class TrackingSession:
         def __init__(self) -> None:
@@ -830,8 +877,8 @@ def test_upload_survives_scan_creation_audit_failure_without_scheduling(monkeypa
             assert saved.mime_type == "text/plain"
             assert saved.file_size == len(plaintext)
             scan = db.query(DiscoveryScan).one()
-            assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
-            assert scan.completed_at is not None
+            assert scan.status == DISCOVERY_SCAN_STATUS_PENDING
+            assert scan.completed_at is None
         finally:
             db.close()
         assert documents_api.document_storage.exists(document_id)

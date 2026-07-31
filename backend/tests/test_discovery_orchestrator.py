@@ -17,10 +17,12 @@ from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
     DISCOVERY_SCAN_STATUS_FAILED,
     DISCOVERY_SCAN_STATUS_PENDING,
+    DISCOVERY_SCAN_STATUS_RUNNING,
     DiscoveryScan,
     EvidenceFinding,
 )
 from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_COMPLETED,
     DISCOVERY_DOCUMENT_STATUS_FAILED,
     DISCOVERY_DOCUMENT_STATUS_SKIPPED,
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
@@ -29,6 +31,7 @@ from app.models.discovery_scan_document import (
 )
 from app.models.document import Document
 from app.models.user import User
+from app.services.audit import log_event
 from app.services.discovery_orchestrator import (
     DISCOVERY_COMPLETED,
     DISCOVERY_DOCUMENT_COMPLETED,
@@ -38,6 +41,7 @@ from app.services.discovery_orchestrator import (
     EVIDENCE_FINDING_CREATED,
     DiscoveryOrchestrationError,
     DiscoveryOrchestrator,
+    DiscoveryScanAlreadyClaimedError,
     UnsupportedDocumentExtractionError,
 )
 
@@ -168,7 +172,7 @@ def test_orchestrator_processes_precreated_scan_without_creating_duplicate() -> 
         assert db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == pending_scan.id).count() == 1
         assert db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == pending_scan.id).count() == 1
 
-        with pytest.raises(DiscoveryOrchestrationError, match="Discovery scan is not pending"):
+        with pytest.raises(DiscoveryScanAlreadyClaimedError, match="Discovery scan is not pending"):
             orchestrator.process_scan(
                 db,
                 scan_id=pending_scan.id,
@@ -203,6 +207,50 @@ def test_orchestrator_rejects_processing_a_nonpending_scan() -> None:
             )
     finally:
         db.close()
+
+
+@pytest.mark.parametrize(
+    "existing_status",
+    [
+        DISCOVERY_SCAN_STATUS_RUNNING,
+        DISCOVERY_SCAN_STATUS_COMPLETE,
+        DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
+        DISCOVERY_SCAN_STATUS_FAILED,
+    ],
+)
+def test_nonpending_scan_replays_are_non_mutating(existing_status: str) -> None:
+    _user_id, document_id = _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+        scan = orchestrator.create_scan(db, user_id="user-1")
+        scan_id = scan.id
+        scan.status = existing_status
+        db.commit()
+        audits_before = db.query(AuditLog).count()
+
+        with pytest.raises(DiscoveryScanAlreadyClaimedError, match="Discovery scan is not pending"):
+            orchestrator.process_scan(
+                db,
+                scan_id=scan_id,
+                user_id="user-1",
+                document_ids=[document_id],
+            )
+    finally:
+        db.close()
+
+    verification_db = SessionLocal()
+    try:
+        assert verification_db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).one().status == existing_status
+        assert verification_db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan_id).count() == 0
+        assert verification_db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan_id).count() == 0
+        assert verification_db.query(AuditLog).count() == audits_before
+    finally:
+        verification_db.close()
 
 
 def test_orchestrator_rejects_scan_ownership_mismatch_without_processing() -> None:
@@ -520,5 +568,106 @@ def test_mark_scan_failed_does_not_rollback_the_caller_session(monkeypatch) -> N
     try:
         assert verification_db.query(User).filter(User.id == "user-1").one().email == "preserved@example.com"
         assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_FAILED).count() == 1
+    finally:
+        verification_db.close()
+
+
+def test_unsupported_document_audit_failure_does_not_persist_skipped_state() -> None:
+    _user_id, document_id = _create_user_and_document()
+
+    def fail_skipped_audit(db, user_id, event_type, details):
+        if event_type == DISCOVERY_DOCUMENT_SKIPPED:
+            raise RuntimeError("simulated skipped audit failure")
+        log_event(db=db, user_id=user_id, event_type=event_type, details=details)
+
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=UnsupportedTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+            audit_logger=fail_skipped_audit,
+        )
+
+        with pytest.raises(DiscoveryOrchestrationError):
+            orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+    finally:
+        db.close()
+
+    verification_db = SessionLocal()
+    try:
+        scan = verification_db.query(DiscoveryScan).one()
+        tracking = verification_db.query(DiscoveryScanDocument).one()
+        assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
+        assert tracking.status != DISCOVERY_DOCUMENT_STATUS_SKIPPED
+        assert tracking.warning_code != DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION
+        assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_DOCUMENT_SKIPPED).count() == 0
+        assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_FAILED).count() == 1
+    finally:
+        verification_db.close()
+
+
+def test_completion_audit_failure_does_not_persist_complete_state() -> None:
+    _user_id, document_id = _create_user_and_document()
+
+    def fail_completion_audit(db, user_id, event_type, details):
+        if event_type == DISCOVERY_COMPLETED:
+            raise RuntimeError("simulated completion audit failure")
+        log_event(db=db, user_id=user_id, event_type=event_type, details=details)
+
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+            audit_logger=fail_completion_audit,
+        )
+
+        with pytest.raises(DiscoveryOrchestrationError):
+            orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+    finally:
+        db.close()
+
+    verification_db = SessionLocal()
+    try:
+        scan = verification_db.query(DiscoveryScan).one()
+        assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
+        assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_COMPLETED).count() == 0
+        assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_FAILED).count() == 1
+        assert verification_db.query(DiscoveryScanDocument).one().status == DISCOVERY_DOCUMENT_STATUS_COMPLETED
+        assert verification_db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan.id).count() == 1
+    finally:
+        verification_db.close()
+
+
+def test_mark_scan_failed_audit_failure_rolls_back_state_and_completion_time() -> None:
+    _create_user_and_document()
+    setup_db = SessionLocal()
+    try:
+        scan = DiscoveryOrchestrator().create_scan(setup_db, user_id="user-1")
+        scan_id = scan.id
+    finally:
+        setup_db.close()
+
+    def fail_failure_audit(db, user_id, event_type, details):
+        if event_type == DISCOVERY_FAILED:
+            raise RuntimeError("simulated failure audit failure")
+        log_event(db=db, user_id=user_id, event_type=event_type, details=details)
+
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(audit_logger=fail_failure_audit)
+        with pytest.raises(RuntimeError, match="simulated failure audit failure"):
+            orchestrator.mark_scan_failed(db, scan_id=scan_id, user_id="user-1")
+    finally:
+        db.close()
+
+    verification_db = SessionLocal()
+    try:
+        persisted_scan = verification_db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).one()
+        assert persisted_scan.status == DISCOVERY_SCAN_STATUS_PENDING
+        assert persisted_scan.completed_at is None
+        assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_FAILED).count() == 0
     finally:
         verification_db.close()

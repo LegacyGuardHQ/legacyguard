@@ -47,6 +47,10 @@ class DiscoveryOrchestrationError(RuntimeError):
     pass
 
 
+class DiscoveryScanAlreadyClaimedError(DiscoveryOrchestrationError):
+    pass
+
+
 class UnsupportedDocumentExtractionError(DiscoveryOrchestrationError):
     pass
 
@@ -205,7 +209,7 @@ class DiscoveryOrchestrator:
             existing_scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).first()
             if existing_scan is None or existing_scan.user_id != user_id:
                 raise DiscoveryOrchestrationError("Discovery scan not found")
-            raise DiscoveryOrchestrationError("Discovery scan is not pending")
+            raise DiscoveryScanAlreadyClaimedError("Discovery scan is not pending")
         db.commit()
         scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id, DiscoveryScan.user_id == user_id).one()
 
@@ -301,7 +305,6 @@ class DiscoveryOrchestrator:
                     documents_skipped += 1
                     tracking.status = DISCOVERY_DOCUMENT_STATUS_SKIPPED
                     tracking.warning_code = DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION
-                    db.commit()
                     self._audit(
                         db,
                         user_id,
@@ -357,8 +360,6 @@ class DiscoveryOrchestrator:
             else:
                 scan.status = DISCOVERY_SCAN_STATUS_COMPLETE
             scan.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            db.refresh(scan)
 
             if scan.status == DISCOVERY_SCAN_STATUS_FAILED:
                 self._audit(
@@ -376,6 +377,7 @@ class DiscoveryOrchestrator:
                     },
                 )
                 db.commit()
+                db.refresh(scan)
                 raise DiscoveryOrchestrationError("Discovery scan failed")
 
             self._audit(
@@ -393,6 +395,7 @@ class DiscoveryOrchestrator:
                 },
             )
             db.commit()
+            db.refresh(scan)
             return scan
         except Exception as exc:
             db.rollback()
@@ -421,23 +424,26 @@ class DiscoveryOrchestrator:
         old_scan_status = scan.status
         scan.status = DISCOVERY_SCAN_STATUS_FAILED
         scan.completed_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(scan)
-        self._audit(
-            db,
-            user_id,
-            DISCOVERY_FAILED,
-            "Discovery scan failed",
-            metadata={
-                "resource_type": "discovery_scan",
-                "resource_id": scan.id,
-                "scan_id": scan.id,
-                "event_type": DISCOVERY_FAILED,
-                "old_status": old_scan_status,
-                "new_status": scan.status,
-            },
-        )
-        db.commit()
+        try:
+            self._audit(
+                db,
+                user_id,
+                DISCOVERY_FAILED,
+                "Discovery scan failed",
+                metadata={
+                    "resource_type": "discovery_scan",
+                    "resource_id": scan.id,
+                    "scan_id": scan.id,
+                    "event_type": DISCOVERY_FAILED,
+                    "old_status": old_scan_status,
+                    "new_status": scan.status,
+                },
+            )
+            db.commit()
+            db.refresh(scan)
+        except Exception:
+            db.rollback()
+            raise
         return scan
 
     def _get_owned_documents(self, db: Session, *, user_id: str, document_ids: list[str]) -> list[Document]:

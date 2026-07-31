@@ -18,7 +18,11 @@ from app.schemas.documents import (
     DocumentUploadResponse,
 )
 from app.security.auth import get_current_user, get_db
-from app.services.discovery_orchestrator import DiscoveryOrchestrator, DiscoveryScanExecutor
+from app.services.discovery_orchestrator import (
+    DiscoveryOrchestrator,
+    DiscoveryScanAlreadyClaimedError,
+    DiscoveryScanExecutor,
+)
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
 from app.services.document_storage import DocumentStorageError, LocalDocumentStorage
 from app.services.document_validation import (
@@ -131,6 +135,13 @@ def _process_discovery_scan_in_background(scan_id: str, user_id: str, document_i
             scan_id=scan_id,
             user_id=user_id,
             document_ids=[document_id],
+        )
+    except DiscoveryScanAlreadyClaimedError:
+        if db is not None:
+            db.rollback()
+        logger.info(
+            "Background discovery scan was already claimed or completed",
+            extra={"scan_id": scan_id, "user_id": user_id},
         )
     except Exception:
         if db is not None:
