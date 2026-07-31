@@ -74,6 +74,11 @@ class DocumentResponse(DocumentListResponse):
     description: str | None = None
 
 
+class DocumentUploadDiscoveryScanResponse(BaseModel):
+    scan_id: str
+    status: str
+
+
 class DocumentUploadResponse(BaseModel):
     id: str
     document_type: str
@@ -84,3 +89,4 @@ class DocumentUploadResponse(BaseModel):
     checksum_sha256: str
     upload_status: str
     updated_at: datetime
+    discovery_scan: DocumentUploadDiscoveryScanResponse | None = None

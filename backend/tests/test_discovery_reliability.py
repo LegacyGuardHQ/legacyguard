@@ -10,10 +10,28 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.database.connection import Base, SessionLocal, engine
-from app.models.discovery import DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS, DiscoveryScan, EvidenceFinding
+from app.models.discovery import (
+    DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
+    DISCOVERY_SCAN_STATUS_FAILED,
+    DiscoveryScan,
+    EvidenceFinding,
+)
+from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_COMPLETED,
+    DISCOVERY_DOCUMENT_STATUS_FAILED,
+    DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
+    DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
+    DiscoveryScanDocument,
+)
 from app.models.document import Document
 from app.models.user import User
-from app.services.discovery_orchestrator import DiscoveryScanExecutor, DiscoveryOrchestrationError, DiscoveryOrchestrator
+from app.services.discovery_orchestrator import (
+    DiscoveryScanExecutor,
+    DiscoveryOrchestrationError,
+    DiscoveryOrchestrator,
+    UnsupportedDocumentExtractionError,
+)
 
 
 @dataclass(frozen=True)
@@ -26,7 +44,9 @@ class Candidate:
 class MixedTextProvider:
     def get_text(self, document: Document) -> str:
         if document.id == "bad-doc":
-            raise DiscoveryOrchestrationError("Document format extraction is not supported")
+            raise UnsupportedDocumentExtractionError("Document format extraction is not supported")
+        if document.id == "failed-doc":
+            raise RuntimeError("genuine processing failure")
         return "retirement rollover"
 
 
@@ -57,7 +77,8 @@ def _seed_documents() -> None:
         user = User(id="user-1", email="user-1@example.com", password_hash="hash")
         good = Document(id="good-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Good")
         bad = Document(id="bad-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Bad")
-        db.add_all([user, good, bad])
+        failed = Document(id="failed-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Failed")
+        db.add_all([user, good, bad, failed])
         db.commit()
     finally:
         db.close()
@@ -78,7 +99,15 @@ def test_partial_scan_success_creates_findings_and_warnings_status() -> None:
         assert scan.status == DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
         assert scan.documents_processed == 1
         assert db.query(EvidenceFinding).count() == 1
-        assert any(event_type == "discovery_document_failed" for event_type, _details in events)
+        tracking = {
+            item.document_id: item
+            for item in db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan.id).all()
+        }
+        assert tracking["good-doc"].status == DISCOVERY_DOCUMENT_STATUS_COMPLETED
+        assert tracking["bad-doc"].status == DISCOVERY_DOCUMENT_STATUS_SKIPPED
+        assert tracking["bad-doc"].warning_code == DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION
+        assert any(event_type == "discovery_document_skipped" for event_type, _details in events)
+        assert not any(event_type == "discovery_document_failed" for event_type, _details in events)
     finally:
         db.close()
 
@@ -112,6 +141,31 @@ def test_audit_events_do_not_contain_sensitive_data() -> None:
         assert "retirement rollover" not in details
         assert "retirement" not in details
         assert "Document format extraction is not supported" not in details
+    finally:
+        db.close()
+
+
+def test_unsupported_document_plus_genuine_failure_still_fails_scan() -> None:
+    _seed_documents()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=MixedTextProvider(),
+            discovery_engine=FindingEngine(),
+            privacy_service=Privacy(),
+        )
+
+        with pytest.raises(DiscoveryOrchestrationError):
+            orchestrator.run_scan(db, user_id="user-1", document_ids=["bad-doc", "failed-doc"])
+
+        scan = db.query(DiscoveryScan).one()
+        assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
+        assert scan.documents_processed == 0
+        tracking = {item.document_id: item for item in db.query(DiscoveryScanDocument).all()}
+        assert tracking["bad-doc"].status == DISCOVERY_DOCUMENT_STATUS_SKIPPED
+        assert tracking["bad-doc"].warning_code == DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION
+        assert tracking["failed-doc"].status == DISCOVERY_DOCUMENT_STATUS_FAILED
+        assert tracking["failed-doc"].warning_code == DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED
     finally:
         db.close()
 

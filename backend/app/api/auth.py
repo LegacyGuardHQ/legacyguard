@@ -35,10 +35,10 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db), reque
     settings = UserSecuritySettings(user_id=user.id, mfa_enabled=False, mfa_method=None, recovery_codes=None, security_preferences="{}")
     db.add(user)
     db.add(settings)
+    log_event(db=db, user_id=user.id, event_type="ACCOUNT_CREATED", details="User registered", request=request)
     db.commit()
     db.refresh(user)
 
-    log_event(db=db, user_id=user.id, event_type="ACCOUNT_CREATED", details="User registered", request=request)
     return user
 
 
@@ -48,11 +48,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request
     allowed, retry_after = rate_limiter.allow(client_key)
     if not allowed:
         log_event(db=db, user_id=None, event_type="LOGIN_FAILED", details="Rate limited", request=request)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many attempts")
 
     user = db.query(User).filter(User.email == str(payload.email).lower()).first()
     if not user or not verify_password(payload.password, user.password_hash):
         log_event(db=db, user_id=user.id if user else None, event_type="LOGIN_FAILED", details="Invalid credentials", request=request)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
@@ -73,9 +75,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request
         device_info=str(request.headers.get("user-agent", "unknown")) if request else "unknown",
     )
     db.add(session)
-    db.commit()
-
     log_event(db=db, user_id=user.id, event_type="LOGIN_SUCCESS", details="User logged in", request=request)
+    db.commit()
     return {
         "access_token": create_access_token(user.id, token_identifier),
         "refresh_token": create_refresh_token(user.id, token_identifier),
@@ -90,16 +91,16 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
         session = db.query(UserSession).filter(UserSession.user_id == current_user.id, UserSession.token_identifier == token_identifier).first()
         if session:
             session.revoked_at = datetime.now(timezone.utc)
-            db.commit()
     log_event(db=db, user_id=current_user.id, event_type="LOGOUT", details="User logged out", request=None)
+    db.commit()
     return {"message": "Logout successful"}
 
 
 @router.post("/sessions/revoke-all")
 def revoke_all_sessions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, str]:
     db.query(UserSession).filter(UserSession.user_id == current_user.id).update({"revoked_at": datetime.now(timezone.utc)})
-    db.commit()
     log_event(db=db, user_id=current_user.id, event_type="SESSION_REVOKED", details="All sessions revoked", request=None)
+    db.commit()
     return {"message": "All sessions revoked"}
 
 

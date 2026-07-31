@@ -1,15 +1,28 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.database.connection import SessionLocal
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
 from app.models.document import DOCUMENT_STATUS_ACTIVE, DOCUMENT_VERIFICATION_UNKNOWN, Document
 from app.models.user import User
-from app.schemas.documents import DocumentCreate, DocumentListResponse, DocumentResponse, DocumentUploadResponse
+from app.schemas.documents import (
+    DocumentCreate,
+    DocumentListResponse,
+    DocumentResponse,
+    DocumentUploadDiscoveryScanResponse,
+    DocumentUploadResponse,
+)
 from app.security.auth import get_current_user, get_db
+from app.services.discovery_orchestrator import (
+    DiscoveryOrchestrator,
+    DiscoveryScanAlreadyClaimedError,
+    DiscoveryScanExecutor,
+)
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
 from app.services.document_storage import DocumentStorageError, LocalDocumentStorage
 from app.services.document_validation import (
@@ -22,8 +35,10 @@ from app.services.document_validation import (
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+logger = logging.getLogger(__name__)
 document_storage = LocalDocumentStorage()
 malware_scanner: MalwareScanner | None = None
+discovery_scan_executor = DiscoveryScanExecutor(DiscoveryOrchestrator())
 
 
 def _get_owned_asset_if_supplied(db: Session, asset_id: str | None, user_id: str) -> Asset | None:
@@ -80,6 +95,73 @@ def _get_owned_document(db: Session, document_id: str, user_id: str) -> Document
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return document
+
+
+def _trigger_discovery_scan_after_upload(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    *,
+    user_id: str,
+    document_id: str,
+) -> DocumentUploadDiscoveryScanResponse | None:
+    scan = discovery_scan_executor.create_pending(db, user_id=user_id)
+    try:
+        background_tasks.add_task(
+            _process_discovery_scan_in_background,
+            scan.id,
+            user_id,
+            document_id,
+        )
+    except Exception:
+        db.rollback()
+        try:
+            discovery_scan_executor.mark_failed(db, scan_id=scan.id, user_id=user_id)
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to mark unscheduled discovery scan as failed",
+                extra={"scan_id": scan.id, "user_id": user_id},
+            )
+        raise
+    return DocumentUploadDiscoveryScanResponse(scan_id=scan.id, status=scan.status)
+
+
+def _process_discovery_scan_in_background(scan_id: str, user_id: str, document_id: str) -> None:
+    db: Session | None = None
+    try:
+        db = SessionLocal()
+        discovery_scan_executor.process_existing(
+            db,
+            scan_id=scan_id,
+            user_id=user_id,
+            document_ids=[document_id],
+        )
+    except DiscoveryScanAlreadyClaimedError:
+        if db is not None:
+            db.rollback()
+        logger.info(
+            "Background discovery scan was already claimed or completed",
+            extra={"scan_id": scan_id, "user_id": user_id},
+        )
+    except Exception:
+        if db is not None:
+            db.rollback()
+        logger.exception(
+            "Background discovery processing failed",
+            extra={"scan_id": scan_id, "user_id": user_id},
+        )
+        if db is not None:
+            try:
+                discovery_scan_executor.mark_failed(db, scan_id=scan_id, user_id=user_id)
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "Failed to record background discovery failure",
+                    extra={"scan_id": scan_id, "user_id": user_id},
+                )
+    finally:
+        if db is not None:
+            db.close()
 
 
 def _validate_document_upload_lifecycle(db: Session, document: Document, user_id: str) -> None:
@@ -159,6 +241,7 @@ def get_document_metadata(
 @router.post("/{document_id}/upload", response_model=DocumentUploadResponse)
 async def upload_encrypted_document_content(
     document_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -206,6 +289,21 @@ async def upload_encrypted_document_content(
                 pass
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
 
+    try:
+        discovery_scan = _trigger_discovery_scan_after_upload(
+            db,
+            background_tasks,
+            user_id=current_user.id,
+            document_id=document.id,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Post-upload discovery processing failed",
+            extra={"document_id": document.id, "user_id": current_user.id},
+        )
+        discovery_scan = None
+
     return DocumentUploadResponse(
         id=document.id,
         document_type=document.document_type,
@@ -216,4 +314,5 @@ async def upload_encrypted_document_content(
         checksum_sha256=document.checksum_sha256,
         upload_status="COMPLETED",
         updated_at=document.updated_at,
+        discovery_scan=discovery_scan,
     )

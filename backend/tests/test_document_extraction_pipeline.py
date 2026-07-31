@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from cryptography.fernet import InvalidToken
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-123456")
@@ -9,11 +10,28 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.database.connection import Base, SessionLocal, engine
-from app.models.discovery import DISCOVERY_SCAN_STATUS_FAILED, DiscoveryScan, EvidenceFinding
+from app.models.discovery import (
+    DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
+    DISCOVERY_SCAN_STATUS_FAILED,
+    DiscoveryScan,
+    EvidenceFinding,
+)
+from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_FAILED,
+    DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
+    DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
+    DiscoveryScanDocument,
+)
 from app.models.document import Document
 from app.models.user import User
 from app.services.document_content_encryption import document_content_encryption_service
-from app.services.discovery_orchestrator import DiscoveryOrchestrationError, DiscoveryOrchestrator, EncryptedDocumentTextProvider
+from app.services.discovery_orchestrator import (
+    DiscoveryOrchestrationError,
+    DiscoveryOrchestrator,
+    EncryptedDocumentTextProvider,
+    UnsupportedDocumentExtractionError,
+)
 
 
 class MemoryStorage:
@@ -22,6 +40,16 @@ class MemoryStorage:
 
     def read_encrypted(self, document_id: str) -> bytes:
         return self.encrypted_bytes
+
+
+class FailingStorage:
+    def read_encrypted(self, document_id: str) -> bytes:
+        raise RuntimeError("storage failure")
+
+
+class FailingExtractionService:
+    def extract_from_bytes(self, content: bytes, *, mime_type: str | None = None):
+        raise RuntimeError("unexpected extraction failure")
 
 
 class CapturingDiscoveryEngine:
@@ -86,17 +114,97 @@ def test_discovery_receives_normalized_text() -> None:
         db.close()
 
 
-def test_unsupported_formats_fail_safely() -> None:
+def test_unsupported_provider_result_has_dedicated_exception_type() -> None:
+    document_id, encrypted_bytes = _create_document_with_encrypted_content(mime_type="application/pdf", plaintext=b"%PDF-1.7 content")
+    provider = EncryptedDocumentTextProvider(storage=MemoryStorage(encrypted_bytes))
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == document_id).one()
+        with pytest.raises(UnsupportedDocumentExtractionError):
+            provider.get_text(document)
+    finally:
+        db.close()
+
+
+def test_unsupported_formats_are_skipped_with_warnings() -> None:
     document_id, encrypted_bytes = _create_document_with_encrypted_content(mime_type="application/pdf", plaintext=b"%PDF-1.7 content")
     provider = EncryptedDocumentTextProvider(storage=MemoryStorage(encrypted_bytes))
     db = SessionLocal()
     try:
         orchestrator = DiscoveryOrchestrator(text_provider=provider)
-        with pytest.raises(DiscoveryOrchestrationError) as exc_info:
+        scan = orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+
+        assert scan.status == DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
+        assert scan.documents_processed == 0
+        tracking = db.query(DiscoveryScanDocument).one()
+        assert tracking.status == DISCOVERY_DOCUMENT_STATUS_SKIPPED
+        assert tracking.warning_code == DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION
+        assert db.query(EvidenceFinding).count() == 0
+    finally:
+        db.close()
+
+
+def test_missing_key_and_storage_failure_are_not_unsupported_extraction() -> None:
+    missing_key_document = Document(
+        id="550e8400-e29b-41d4-a716-446655440001",
+        user_id="user-1",
+        document_type="ACCOUNT_STATEMENT",
+        document_name="Missing key",
+        mime_type="text/plain",
+    )
+    missing_key_provider = EncryptedDocumentTextProvider(storage=MemoryStorage(b"unused"))
+    with pytest.raises(DiscoveryOrchestrationError) as missing_key_error:
+        missing_key_provider.get_text(missing_key_document)
+    assert not isinstance(missing_key_error.value, UnsupportedDocumentExtractionError)
+
+    document_id, encrypted_bytes = _create_document_with_encrypted_content(mime_type="text/plain", plaintext=b"content")
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == document_id).one()
+        with pytest.raises(RuntimeError) as storage_error:
+            EncryptedDocumentTextProvider(storage=FailingStorage()).get_text(document)
+        assert not isinstance(storage_error.value, UnsupportedDocumentExtractionError)
+    finally:
+        db.close()
+
+
+def test_decryption_and_unexpected_extraction_failures_are_not_unsupported() -> None:
+    document_id, encrypted_bytes = _create_document_with_encrypted_content(mime_type="text/plain", plaintext=b"content")
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == document_id).one()
+
+        with pytest.raises(InvalidToken) as decryption_error:
+            EncryptedDocumentTextProvider(storage=MemoryStorage(b"x" + encrypted_bytes[1:])).get_text(document)
+        assert not isinstance(decryption_error.value, UnsupportedDocumentExtractionError)
+
+        with pytest.raises(RuntimeError) as extraction_error:
+            EncryptedDocumentTextProvider(
+                storage=MemoryStorage(encrypted_bytes),
+                extraction_service=FailingExtractionService(),
+            ).get_text(document)
+        assert not isinstance(extraction_error.value, UnsupportedDocumentExtractionError)
+    finally:
+        db.close()
+
+
+def test_unexpected_supported_format_extraction_failure_remains_failed() -> None:
+    document_id, encrypted_bytes = _create_document_with_encrypted_content(mime_type="text/plain", plaintext=b"content")
+    provider = EncryptedDocumentTextProvider(
+        storage=MemoryStorage(encrypted_bytes),
+        extraction_service=FailingExtractionService(),
+    )
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(text_provider=provider)
+        with pytest.raises(DiscoveryOrchestrationError):
             orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
-        assert str(exc_info.value) == "Discovery scan failed"
+
         scan = db.query(DiscoveryScan).one()
         assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
+        tracking = db.query(DiscoveryScanDocument).one()
+        assert tracking.status == DISCOVERY_DOCUMENT_STATUS_FAILED
+        assert tracking.warning_code == DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED
     finally:
         db.close()
 
@@ -107,8 +215,7 @@ def test_unsupported_formats_do_not_create_partial_findings() -> None:
     db = SessionLocal()
     try:
         orchestrator = DiscoveryOrchestrator(text_provider=provider)
-        with pytest.raises(DiscoveryOrchestrationError):
-            orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+        orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
         assert db.query(EvidenceFinding).count() == 0
     finally:
         db.close()

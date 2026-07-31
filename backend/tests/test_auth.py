@@ -13,7 +13,11 @@ os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.main import app
 from app.config import settings
+from app.database.connection import SessionLocal
+from app.models.audit_log import AuditLog
+from app.models.session import UserSession
 from app.security.auth import create_access_token, create_refresh_token
+from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
 
@@ -22,10 +26,12 @@ client = TestClient(app)
 def reset_db():
     from app.database.connection import Base, engine
 
+    rate_limiter.reset_all()
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+    rate_limiter.reset_all()
 
 
 def test_user_registration_and_login() -> None:
@@ -45,6 +51,13 @@ def test_user_registration_and_login() -> None:
     assert login_response.status_code == 200
     assert login_response.json()["access_token"]
     assert login_response.json()["refresh_token"]
+
+    db = SessionLocal()
+    try:
+        assert db.query(AuditLog).filter(AuditLog.event_type == "ACCOUNT_CREATED").count() == 1
+        assert db.query(AuditLog).filter(AuditLog.event_type == "LOGIN_SUCCESS").count() == 1
+    finally:
+        db.close()
 
 
 def test_access_and_refresh_token_creation_include_unique_identifiers_and_expiration() -> None:
@@ -74,6 +87,40 @@ def test_login_failure_with_invalid_password() -> None:
         json={"email": "user@example.com", "password": "WrongPass123!"},
     )
     assert response.status_code == 401
+
+    db = SessionLocal()
+    try:
+        assert db.query(AuditLog).filter(AuditLog.event_type == "LOGIN_FAILED").count() == 1
+    finally:
+        db.close()
+
+
+def test_logout_persists_revocation_and_audit_event() -> None:
+    client.post(
+        "/auth/register",
+        json={"email": "logout@example.com", "password": "StrongPass123!"},
+    )
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "logout@example.com", "password": "StrongPass123!"},
+    )
+    access_token = login_response.json()["access_token"]
+
+    response = client.post(
+        "/auth/logout",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "Logout successful"}
+
+    db = SessionLocal()
+    try:
+        session = db.query(UserSession).one()
+        assert session.revoked_at is not None
+        assert db.query(AuditLog).filter(AuditLog.event_type == "LOGOUT").count() == 1
+    finally:
+        db.close()
 
 
 def test_protected_route_requires_authentication() -> None:
