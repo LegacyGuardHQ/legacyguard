@@ -1,19 +1,32 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.discovery import EVIDENCE_REVIEW_STATUS_CONFIRMED, EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, EVIDENCE_REVIEW_STATUS_VALUES, DiscoveryScan, EvidenceFinding
+from app.models.discovery import (
+    DISCOVERY_SCAN_STATUS_VALUES,
+    EVIDENCE_REVIEW_STATUS_CONFIRMED,
+    EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+    EVIDENCE_REVIEW_STATUS_VALUES,
+    DiscoveryScan,
+    EvidenceFinding,
+)
 from app.models.discovery_asset_link import DiscoveryFindingAssetLink
+from app.models.discovery_scan_document import DiscoveryScanDocument
+from app.models.document import Document
 from app.models.asset import Asset
 from app.models.user import User
 from app.schemas.discovery import (
     DiscoveryReportSummaryResponse,
     DiscoverySafeReportResponse,
+    DiscoveryDashboardResponse,
+    DiscoveryScanDocumentResponse,
     DiscoveryScanCreate,
     DiscoveryScanResponse,
     DiscoveryScanStatusResponse,
     DiscoveryScanSummaryResponse,
     EvidenceFindingResponse,
+    EvidenceFindingDetailResponse,
     EvidenceFindingReviewRequest,
     ManualAssetConversionRequest,
     PaginatedDiscoveryScanResponse,
@@ -62,6 +75,16 @@ def _finding_response(finding: EvidenceFinding) -> EvidenceFindingResponse:
         confidence_score=finding.confidence_score,
         review_status=finding.review_status,
         created_at=finding.created_at,
+    )
+
+
+def _finding_detail_response(finding: EvidenceFinding, document: Document) -> EvidenceFindingDetailResponse:
+    return EvidenceFindingDetailResponse(
+        **_finding_response(finding).model_dump(),
+        scan_id=finding.scan_id,
+        document_id=document.id,
+        document_name=document.document_name,
+        document_type=document.document_type,
     )
 
 
@@ -137,6 +160,70 @@ def create_discovery_scan(
     except DiscoveryOrchestrationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Discovery scan failed") from exc
     return _scan_response(scan)
+
+
+@router.get("/dashboard", response_model=DiscoveryDashboardResponse)
+def get_discovery_dashboard(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DiscoveryDashboardResponse:
+    scan_status_rows = (
+        db.query(DiscoveryScan.status, func.count(DiscoveryScan.id))
+        .filter(DiscoveryScan.user_id == current_user.id)
+        .group_by(DiscoveryScan.status)
+        .all()
+    )
+    scans_by_status = {scan_status: 0 for scan_status in DISCOVERY_SCAN_STATUS_VALUES}
+    for scan_status, count in scan_status_rows:
+        if scan_status not in scans_by_status:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Discovery dashboard contains an unsupported scan status",
+            )
+        scans_by_status[scan_status] = count
+
+    review_status_rows = (
+        db.query(EvidenceFinding.review_status, func.count(EvidenceFinding.id))
+        .join(DiscoveryScan, EvidenceFinding.scan_id == DiscoveryScan.id)
+        .filter(DiscoveryScan.user_id == current_user.id)
+        .group_by(EvidenceFinding.review_status)
+        .all()
+    )
+    findings_by_review_status = {
+        review_status: 0 for review_status in EVIDENCE_REVIEW_STATUS_VALUES
+    }
+    for review_status, count in review_status_rows:
+        if review_status not in findings_by_review_status:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Discovery dashboard contains an unsupported review status",
+            )
+        findings_by_review_status[review_status] = count
+
+    category_rows = (
+        db.query(EvidenceFinding.category, func.count(EvidenceFinding.id))
+        .join(DiscoveryScan, EvidenceFinding.scan_id == DiscoveryScan.id)
+        .filter(DiscoveryScan.user_id == current_user.id)
+        .group_by(EvidenceFinding.category)
+        .order_by(EvidenceFinding.category.asc())
+        .all()
+    )
+    recent_scans = (
+        db.query(DiscoveryScan)
+        .filter(DiscoveryScan.user_id == current_user.id)
+        .order_by(DiscoveryScan.created_at.desc(), DiscoveryScan.id.desc())
+        .limit(5)
+        .all()
+    )
+    return DiscoveryDashboardResponse(
+        total_scans=sum(scans_by_status.values()),
+        scans_by_status=scans_by_status,
+        total_findings=sum(findings_by_review_status.values()),
+        pending_reviews=findings_by_review_status[EVIDENCE_REVIEW_STATUS_PENDING_REVIEW],
+        findings_by_category={category: count for category, count in category_rows},
+        findings_by_review_status=findings_by_review_status,
+        recent_scans=[_scan_summary_response(scan) for scan in recent_scans],
+    )
 
 
 @router.get("/scans", response_model=PaginatedDiscoveryScanResponse)
@@ -238,6 +325,36 @@ def list_discovery_findings(
     )
 
 
+@router.get("/scans/{scan_id}/documents", response_model=list[DiscoveryScanDocumentResponse])
+def list_discovery_scan_documents(
+    scan_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[DiscoveryScanDocumentResponse]:
+    scan = _get_owned_scan(db, scan_id, current_user.id)
+    rows = (
+        db.query(DiscoveryScanDocument, Document)
+        .join(Document, DiscoveryScanDocument.document_id == Document.id)
+        .filter(
+            DiscoveryScanDocument.scan_id == scan.id,
+            Document.user_id == current_user.id,
+        )
+        .order_by(DiscoveryScanDocument.created_at.asc(), DiscoveryScanDocument.id.asc())
+        .all()
+    )
+    return [
+        DiscoveryScanDocumentResponse(
+            document_id=document.id,
+            document_name=document.document_name,
+            document_type=document.document_type,
+            status=tracking.status,
+            warning_code=tracking.warning_code,
+            created_at=tracking.created_at,
+        )
+        for tracking, document in rows
+    ]
+
+
 @router.get("/findings/review-queue", response_model=PaginatedEvidenceFindingResponse)
 def list_discovery_review_queue(
     page: int = Query(1, ge=1),
@@ -273,6 +390,23 @@ def list_discovery_review_queue(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@router.get("/findings/{finding_id}", response_model=EvidenceFindingDetailResponse)
+def get_discovery_finding(
+    finding_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> EvidenceFindingDetailResponse:
+    finding = _get_owned_finding(db, finding_id, current_user.id)
+    document = (
+        db.query(Document)
+        .filter(Document.id == finding.document_id, Document.user_id == current_user.id)
+        .first()
+    )
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence finding not found")
+    return _finding_detail_response(finding, document)
 
 
 @router.post(
