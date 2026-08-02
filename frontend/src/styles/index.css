@@ -128,7 +128,36 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
 .health-online .status-dot { background: #36d399; }
 .health-offline .status-dot { background: #f87171; }
 
+.app-nav {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.75rem clamp(1rem, 4vw, 3.5rem);
+  border-bottom: 1px solid rgba(145, 184, 220, 0.12);
+  background: rgba(7, 17, 31, 0.72);
+}
+.nav-link {
+  color: #9fb2c9;
+  text-decoration: none;
+  font-weight: 750;
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+}
+.nav-link:hover { color: #e8eef8; background: rgba(114, 217, 234, 0.08); }
+.nav-link-active { color: #07111f; background: #72d9ea; }
+.nav-link-active:hover { color: #07111f; background: #8de3ef; }
+.shell-error { max-width: 1200px; margin: 1rem auto 0; }
+
 .dashboard { max-width: 1200px; margin: 0 auto; padding: clamp(1.25rem, 5vw, 4rem); }
+.page-panel {
+  padding: clamp(1.5rem, 4vw, 3rem);
+  border-radius: 24px;
+  border: 1px solid rgba(145, 184, 220, 0.18);
+  background: linear-gradient(135deg, rgba(21, 50, 75, 0.85), rgba(34, 31, 83, 0.72));
+}
+.page-panel h1 { margin: 0.3rem 0 0.9rem; font-size: clamp(2rem, 4vw, 3.5rem); }
+.page-panel > p:not(.eyebrow, .resource-id) { color: #c1d0e1; line-height: 1.7; max-width: 720px; }
+.resource-id { color: #8fa5bf; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+.foundation-badge { display: inline-block; margin-top: 1rem; color: #72d9ea; font-size: 0.8rem; font-weight: 800; }
 .welcome-panel {
   padding: clamp(1.5rem, 4vw, 3rem);
   border-radius: 24px;
@@ -148,5 +177,7 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
   .auth-intro h2 { font-size: 2.5rem; }
   .app-header { align-items: flex-start; flex-direction: column; }
   .header-actions { width: 100%; justify-content: space-between; }
+  .app-nav { overflow-x: auto; }
+  .nav-link { white-space: nowrap; }
   .dashboard-grid { grid-template-columns: 1fr; }
 }

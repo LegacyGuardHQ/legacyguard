@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ApiError } from '../services/api';
+import { ApiError } from '../api/client';
 
 type AuthFormProps = {
   mode: 'login' | 'register';

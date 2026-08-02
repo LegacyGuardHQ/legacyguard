@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchHealth } from '../services/api';
+import { fetchHealth } from '../api/health';
 
 type Status = 'checking' | 'online' | 'offline';
 

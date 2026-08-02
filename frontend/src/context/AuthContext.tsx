@@ -2,14 +2,16 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import {
   ApiError,
   clearTokens,
-  fetchCurrentUser,
   getAccessToken,
+  saveTokens,
+} from '../api/client';
+import {
+  fetchCurrentUser,
   login as loginRequest,
   logout as logoutRequest,
   register as registerRequest,
-  saveTokens,
-  type User,
-} from '../services/api';
+} from '../api/auth';
+import type { User } from '../types/auth';
 
 type AuthContextValue = {
   user: User | null;
@@ -58,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const tokens = await loginRequest(email, password);
-    saveTokens(tokens);
+    saveTokens(tokens.access_token, tokens.refresh_token);
     try {
       setUser(await fetchCurrentUser());
     } catch (error) {
