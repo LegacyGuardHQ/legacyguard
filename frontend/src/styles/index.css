@@ -173,6 +173,7 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
 .coming-soon { display: inline-block; color: #72d9ea; font-size: 0.8rem; font-weight: 800; }
 
 .discovery-overview { display: grid; gap: 1.25rem; }
+.scan-history { display: grid; gap: 1.25rem; }
 .overview-header {
   padding: clamp(1.5rem, 4vw, 2.6rem);
   border: 1px solid rgba(145, 184, 220, 0.18);
@@ -266,6 +267,22 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
 .state-symbol { display: inline-grid; width: 2.6rem; height: 2.6rem; place-items: center; border: 1px solid #41617e; border-radius: 50%; color: #72d9ea; font-size: 1.25rem; font-weight: 900; }
 .dashboard-error { border-color: rgba(255, 155, 155, 0.4); }
 .dashboard-error .state-symbol { color: #ffadad; border-color: rgba(255, 155, 155, 0.55); }
+.scan-history-panel { padding: 1.35rem; border: 1px solid #223850; border-radius: 18px; background: rgba(11, 26, 44, 0.94); }
+.scan-history-panel h2 { margin: 0; font-size: 1.25rem; }
+.scan-count { margin: 0; color: #9fb2c9; }
+.scan-history-list { display: grid; gap: 0.8rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.scan-history-link { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; padding: 1.1rem; border: 1px solid rgba(145, 184, 220, 0.16); border-radius: 14px; color: inherit; text-decoration: none; background: rgba(7, 20, 34, 0.7); }
+.scan-history-link:hover { border-color: rgba(114, 217, 234, 0.55); background: rgba(14, 39, 59, 0.8); }
+.scan-history-primary { display: grid; gap: 0.3rem; min-width: 0; }
+.scan-history-primary strong { overflow-wrap: anywhere; }
+.scan-history-primary span { color: #93a8c0; font-size: 0.9rem; }
+.scan-history-details { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin: 0; padding-top: 0.9rem; border-top: 1px solid rgba(145, 184, 220, 0.13); }
+.scan-history-details dt { color: #8fa5bf; font-size: 0.8rem; }
+.scan-history-details dd { margin: 0.25rem 0 0; color: #dce8f4; overflow-wrap: anywhere; }
+.scan-history-link .link-direction { grid-column: 1 / -1; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.25rem; }
+.pagination span { color: #b9c9da; font-weight: 750; }
+.scan-history-link:focus-visible { outline: 3px solid rgba(114, 217, 234, 0.55); outline-offset: 3px; }
 
 .recent-scan-link:focus-visible, .text-link:focus-visible, .action-link:focus-visible {
   outline: 3px solid rgba(114, 217, 234, 0.55);
@@ -285,4 +302,6 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
   .recent-scan-link { grid-template-columns: minmax(0, 1fr) auto; }
   .link-direction { grid-column: 1 / -1; }
   .section-heading { align-items: flex-start; flex-direction: column; }
+  .scan-history-details { grid-template-columns: 1fr; }
+  .pagination { justify-content: space-between; }
 }

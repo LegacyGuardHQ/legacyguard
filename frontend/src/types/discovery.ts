@@ -28,3 +28,11 @@ export type DiscoveryDashboardResponse = {
   pending_reviews: number;
   recent_scans: DiscoveryScanSummary[];
 };
+
+export type PaginatedDiscoveryScansResponse = {
+  items: DiscoveryScanSummary[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+};
