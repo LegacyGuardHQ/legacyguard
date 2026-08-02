@@ -1,11 +1,17 @@
-import React, { useState } from 'react';
-import AuthForm from '../components/AuthForm';
-import { AuthProvider, useAuth } from '../context/AuthContext';
-import Dashboard from './Dashboard';
+import React from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import AppShell from '../components/AppShell';
+import ProtectedRoute from '../components/ProtectedRoute';
+import { useAuth } from '../context/AuthContext';
+import DiscoveryOverviewPage from './DiscoveryOverviewPage';
+import FindingDetailPage from './FindingDetailPage';
+import LoginPage from './LoginPage';
+import ReviewQueuePage from './ReviewQueuePage';
+import ScanDetailPage from './ScanDetailPage';
+import ScanHistoryPage from './ScanHistoryPage';
 
-function AppContent() {
-  const { isAuthenticated, isInitializing, login, register } = useAuth();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+function HomeRedirect() {
+  const { isAuthenticated, isInitializing } = useAuth();
 
   if (isInitializing) {
     return (
@@ -15,32 +21,24 @@ function AppContent() {
     );
   }
 
-  if (isAuthenticated) {
-    return <Dashboard />;
-  }
-
-  return (
-    <main className="auth-page">
-      <div className="auth-intro">
-        <p className="eyebrow">Privacy-first continuity planning</p>
-        <h2>Organize what exists, what may exist, and what must happen next.</h2>
-        <p>
-          LegacyGuard separates verified assets from unconfirmed discovery findings and keeps every decision under your control.
-        </p>
-      </div>
-      <AuthForm
-        mode={mode}
-        onSubmit={mode === 'login' ? login : register}
-        onSwitchMode={() => setMode((current) => (current === 'login' ? 'register' : 'login'))}
-      />
-    </main>
-  );
+  return <Navigate to={isAuthenticated ? '/discovery' : '/login'} replace />;
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <Routes>
+      <Route path="/" element={<HomeRedirect />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppShell />}>
+          <Route path="/discovery" element={<DiscoveryOverviewPage />} />
+          <Route path="/discovery/scans" element={<ScanHistoryPage />} />
+          <Route path="/discovery/scans/:scanId" element={<ScanDetailPage />} />
+          <Route path="/discovery/review" element={<ReviewQueuePage />} />
+          <Route path="/discovery/findings/:findingId" element={<FindingDetailPage />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

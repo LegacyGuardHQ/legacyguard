@@ -3,23 +3,6 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:800
 const ACCESS_TOKEN_KEY = 'legacyguard.access_token';
 const REFRESH_TOKEN_KEY = 'legacyguard.refresh_token';
 
-export type User = {
-  id: string;
-  email: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  last_login: string | null;
-};
-
-export type TokenResponse = {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-};
-
-export type HealthResponse = Record<string, unknown>;
-
 export class ApiError extends Error {
   status: number;
   detail?: string;
@@ -36,9 +19,9 @@ export function getAccessToken(): string | null {
   return sessionStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-export function saveTokens(tokens: TokenResponse): void {
-  sessionStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-  sessionStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+export function saveTokens(accessToken: string, refreshToken: string): void {
+  sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
 }
 
 export function clearTokens(): void {
@@ -71,7 +54,7 @@ async function parseError(response: Response): Promise<ApiError> {
   return new ApiError(message, response.status, detail);
 }
 
-async function request<T>(path: string, options: RequestInit = {}, authenticated = false): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}, authenticated = false): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
 
@@ -110,30 +93,4 @@ async function request<T>(path: string, options: RequestInit = {}, authenticated
   }
 
   return (await response.json()) as T;
-}
-
-export function fetchHealth(): Promise<HealthResponse> {
-  return request<HealthResponse>('/health');
-}
-
-export function register(email: string, password: string): Promise<User> {
-  return request<User>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-}
-
-export function login(email: string, password: string): Promise<TokenResponse> {
-  return request<TokenResponse>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-}
-
-export function fetchCurrentUser(): Promise<User> {
-  return request<User>('/auth/me', {}, true);
-}
-
-export function logout(): Promise<{ message: string }> {
-  return request<{ message: string }>('/auth/logout', { method: 'POST' }, true);
 }
