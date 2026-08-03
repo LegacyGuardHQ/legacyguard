@@ -36,3 +36,54 @@ export type PaginatedDiscoveryScansResponse = {
   page_size: number;
   total_pages: number;
 };
+
+export type DiscoveryDocumentStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+
+export type DiscoveryDocumentWarning = 'PROCESSING_FAILED' | 'UNSUPPORTED_EXTRACTION';
+
+export type DiscoveryScanStatusResponse = {
+  scan_id: string;
+  status: DiscoveryScanStatus;
+  documents_processed: number;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type DiscoveryReportSummaryResponse = {
+  scan_id: string;
+  status: DiscoveryScanStatus;
+  total_findings: number;
+  categories: Record<string, number>;
+  review_statuses: Record<string, number>;
+};
+
+export type DiscoverySafeReportResponse = DiscoveryReportSummaryResponse & {
+  documents_processed: number;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type DiscoveryScanDocumentResponse = {
+  document_id: string;
+  document_name: string;
+  document_type: string;
+  status: DiscoveryDocumentStatus;
+  warning_code: DiscoveryDocumentWarning | null;
+  created_at: string;
+};
+
+export type EvidenceFindingResponse = {
+  finding_id: string;
+  category: string;
+  confidence_score: number;
+  review_status: DiscoveryReviewStatus;
+  created_at: string;
+};
+
+export type PaginatedEvidenceFindingResponse = {
+  items: EvidenceFindingResponse[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+};

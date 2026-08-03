@@ -289,6 +289,117 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
   outline-offset: 3px;
 }
 
+.scan-detail { display: grid; gap: 1.25rem; }
+.scan-detail-card {
+  padding: 1.35rem;
+  border: 1px solid #223850;
+  border-radius: 18px;
+  background: rgba(11, 26, 44, 0.94);
+}
+.scan-detail-card h2 { margin: 0; font-size: 1.25rem; }
+.scan-detail-card h3 { margin: 0 0 0.8rem; font-size: 1.05rem; color: #dce8f4; }
+.active-scan-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid rgba(114, 217, 234, 0.4);
+  border-radius: 12px;
+  background: rgba(20, 56, 75, 0.5);
+  color: #72d9ea;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+.spinner-dot {
+  animation: pulse-dot 1.5s infinite ease-in-out;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+.timeline-grid, .report-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.2rem 0 0;
+  padding: 0;
+}
+.timeline-grid dt, .report-metrics-grid dt { color: #8fa5bf; font-size: 0.82rem; }
+.timeline-grid dd, .report-metrics-grid dd { margin: 0.3rem 0 0; color: #f4f8fd; font-weight: 750; overflow-wrap: anywhere; }
+
+.total-badge {
+  color: #72d9ea;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+.trust-note {
+  margin-top: 1.2rem;
+  padding: 0.9rem 1.1rem;
+  border-left: 3px solid #72d9ea;
+  background: rgba(114, 217, 234, 0.06);
+  border-radius: 0 12px 12px 0;
+  font-size: 0.88rem;
+  color: #b0c6dd;
+}
+.report-copy { color: #9fb2c9; line-height: 1.6; margin: 0.7rem 0 1rem; }
+
+.document-list, .findings-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.document-item, .finding-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1.1rem;
+  border: 1px solid rgba(145, 184, 220, 0.16);
+  border-radius: 12px;
+  background: rgba(7, 20, 34, 0.7);
+}
+.document-main, .finding-main { display: grid; gap: 0.25rem; min-width: 0; }
+.document-main strong, .finding-main strong { color: #f4f8fd; overflow-wrap: anywhere; }
+.document-type, .finding-id { color: #8fa5bf; font-size: 0.85rem; }
+.document-status-col, .finding-meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+.doc-status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(145, 184, 220, 0.12);
+  color: #dce8f4;
+}
+.doc-status-badge.status-completed { background: rgba(54, 211, 153, 0.15); color: #8de3bf; }
+.doc-status-badge.status-processing { background: rgba(114, 217, 234, 0.15); color: #72d9ea; }
+.doc-status-badge.status-pending { background: rgba(243, 207, 114, 0.15); color: #f3cf72; }
+.doc-status-badge.status-skipped { background: rgba(245, 185, 127, 0.15); color: #f5b97f; }
+.doc-status-badge.status-failed { background: rgba(255, 155, 155, 0.15); color: #ff9b9b; }
+
+.warning-pill {
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 750;
+  background: rgba(245, 185, 127, 0.18);
+  border: 1px solid rgba(245, 185, 127, 0.35);
+  color: #f5b97f;
+}
+
+.confidence-signal {
+  color: #9fb2c9;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+.muted-text { color: #8fa5bf; margin-top: 1rem; }
+.scan-detail-footer { margin-top: 0.5rem; }
+
 @media (max-width: 780px) {
   .auth-page { grid-template-columns: 1fr; padding: 1.25rem; }
   .auth-intro h2 { font-size: 2.5rem; }
@@ -304,4 +415,6 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
   .section-heading { align-items: flex-start; flex-direction: column; }
   .scan-history-details { grid-template-columns: 1fr; }
   .pagination { justify-content: space-between; }
+  .timeline-grid, .report-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .document-item, .finding-item { flex-direction: column; align-items: flex-start; }
 }
