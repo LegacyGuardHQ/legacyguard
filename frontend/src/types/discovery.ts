@@ -80,6 +80,13 @@ export type EvidenceFindingResponse = {
   created_at: string;
 };
 
+export type EvidenceFindingDetailResponse = EvidenceFindingResponse & {
+  scan_id: string;
+  document_id: string;
+  document_name: string;
+  document_type: string;
+};
+
 export type PaginatedEvidenceFindingResponse = {
   items: EvidenceFindingResponse[];
   total_count: number;
