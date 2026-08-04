@@ -10,7 +10,7 @@ Generated:
 
 Repository:
 
-<project-root>
+LegacyGuard repository root
 
 Remote:
 

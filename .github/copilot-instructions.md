@@ -156,10 +156,9 @@ If a command is not run or fails, report that fact and the reason exactly. Do no
 
 `docs/PROJECT_STATE.md` is the operational milestone snapshot; `docs/ROADMAP.md` and architecture documents may describe longer-term or earlier plans. Reconcile them with current code and Git history.
 
-At the latest documented clean `master` snapshot, authentication, asset management, the document vault, discovery and review workflows, manual asset conversion, discovery dashboard contracts, discovery overview, scan history, scan detail, and CI were complete. The next documented milestone was Phase 4B.5, the Finding Review Queue UI, using existing backend APIs. Because active branches may already advance that state, never assume this remains the next task without checking.
+At the latest documented clean `master` snapshot, authentication, asset management, the document vault, discovery and review workflows, manual asset conversion, discovery dashboard contracts, discovery overview, scan history, scan detail, and CI were complete. The next documented milestone was Phase 4B.6, the Finding Detail, using existing backend APIs. Because active branches may already advance that state, never assume this remains the next task without checking.
 
 Do not pull later roadmap items into the current milestone. In particular, do not add OCR, AI features, new backend endpoints, or automatic asset creation unless a newly approved milestone explicitly requires them and the privacy design is reviewed.
-
 ## Explicitly prohibited behavior
 
 Do not:
