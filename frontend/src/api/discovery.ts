@@ -2,9 +2,11 @@ import { request } from './client';
 import type {
   DiscoveryDashboardResponse,
   DiscoveryReportSummaryResponse,
+  DiscoveryReviewStatus,
   DiscoverySafeReportResponse,
   DiscoveryScanDocumentResponse,
   DiscoveryScanStatusResponse,
+  EvidenceFindingResponse,
   PaginatedDiscoveryScansResponse,
   PaginatedEvidenceFindingResponse,
 } from '../types/discovery';
@@ -43,6 +45,33 @@ export function fetchDiscoveryScanFindings(
   return request<PaginatedEvidenceFindingResponse>(
     `/discovery/scans/${encodeURIComponent(scanId)}/findings?${params.toString()}`,
     {},
+    true
+  );
+}
+
+export function fetchDiscoveryReviewQueue(
+  page: number,
+  pageSize: number,
+  reviewStatus: DiscoveryReviewStatus = 'PENDING_REVIEW'
+): Promise<PaginatedEvidenceFindingResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    review_status: reviewStatus,
+  });
+  return request<PaginatedEvidenceFindingResponse>(`/discovery/findings/review-queue?${params.toString()}`, {}, true);
+}
+
+export function updateDiscoveryFindingStatus(
+  findingId: string,
+  reviewStatus: DiscoveryReviewStatus
+): Promise<EvidenceFindingResponse> {
+  return request<EvidenceFindingResponse>(
+    `/discovery/findings/${encodeURIComponent(findingId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ review_status: reviewStatus }),
+    },
     true
   );
 }

@@ -87,3 +87,7 @@ export type PaginatedEvidenceFindingResponse = {
   page_size: number;
   total_pages: number;
 };
+
+export type EvidenceFindingReviewRequest = {
+  review_status: DiscoveryReviewStatus;
+};
