@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchDiscoveryReviewQueue, updateDiscoveryFindingStatus } from '../api/discovery';
-import type { DiscoveryReviewStatus } from '../types/discovery';
+import type { DiscoveryReviewStatus, EvidenceFindingDetailResponse } from '../types/discovery';
+import { discoveryFindingDetailQueryKey } from './useDiscoveryFindingDetail';
 
 export const discoveryReviewQueueQueryKey = (
   page: number,
@@ -31,7 +32,12 @@ export function useUpdateFindingStatus() {
       findingId: string;
       reviewStatus: DiscoveryReviewStatus;
     }) => updateDiscoveryFindingStatus(findingId, reviewStatus),
-    onSuccess: () => {
+    onSuccess: (finding, variables) => {
+      const detailQueryKey = discoveryFindingDetailQueryKey(variables.findingId);
+      queryClient.setQueryData<EvidenceFindingDetailResponse>(detailQueryKey, (current) =>
+        current ? { ...current, ...finding } : current
+      );
+      queryClient.invalidateQueries({ queryKey: detailQueryKey });
       queryClient.invalidateQueries({ queryKey: ['discovery', 'review-queue'] });
       queryClient.invalidateQueries({ queryKey: ['discovery', 'dashboard'] });
     },

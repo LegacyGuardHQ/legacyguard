@@ -6,6 +6,7 @@ import type {
   DiscoverySafeReportResponse,
   DiscoveryScanDocumentResponse,
   DiscoveryScanStatusResponse,
+  EvidenceFindingDetailResponse,
   EvidenceFindingResponse,
   PaginatedDiscoveryScansResponse,
   PaginatedEvidenceFindingResponse,
@@ -44,6 +45,14 @@ export function fetchDiscoveryScanFindings(
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   return request<PaginatedEvidenceFindingResponse>(
     `/discovery/scans/${encodeURIComponent(scanId)}/findings?${params.toString()}`,
+    {},
+    true
+  );
+}
+
+export function fetchDiscoveryFinding(findingId: string): Promise<EvidenceFindingDetailResponse> {
+  return request<EvidenceFindingDetailResponse>(
+    `/discovery/findings/${encodeURIComponent(findingId)}`,
     {},
     true
   );

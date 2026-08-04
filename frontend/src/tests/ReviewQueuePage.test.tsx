@@ -102,6 +102,10 @@ describe('ReviewQueuePage', () => {
     expect(pendingTab).toHaveAttribute('aria-controls', panel.id);
     expect(panel).toHaveAttribute('aria-labelledby', pendingTab.id);
     expect(fetchDiscoveryReviewQueueMock).toHaveBeenCalledWith(1, 10, 'PENDING_REVIEW');
+    expect(screen.getByRole('link', { name: /View finding details/ })).toHaveAttribute(
+      'href',
+      '/discovery/findings/finding-pending'
+    );
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
