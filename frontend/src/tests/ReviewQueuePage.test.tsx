@@ -1,11 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
+import ProtectedRoute from '../components/ProtectedRoute';
+import { AuthProvider } from '../context/AuthContext';
 import ReviewQueuePage from '../pages/ReviewQueuePage';
 import type {
+  DiscoveryFindingCategory,
   DiscoveryReviewStatus,
   EvidenceFindingResponse,
   PaginatedEvidenceFindingResponse,
@@ -76,13 +79,19 @@ function renderReviewQueue() {
   );
 }
 
+async function selectCategory(user: ReturnType<typeof userEvent.setup>, category: DiscoveryFindingCategory) {
+  const select = screen.getByRole('combobox', { name: 'Category' });
+  await waitFor(() => expect(select).toBeEnabled());
+  await user.selectOptions(select, category);
+}
+
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('ReviewQueuePage', () => {
-  it('renders whole-number confidence and accessible status tabs without category filtering', async () => {
+  it('renders whole-number confidence with accessible status and category filters', async () => {
     fetchDiscoveryReviewQueueMock.mockResolvedValue(queuePayload('PENDING_REVIEW'));
     vi.stubGlobal('fetch', vi.fn());
 
@@ -90,7 +99,8 @@ describe('ReviewQueuePage', () => {
 
     expect(await screen.findByText('85%')).toBeInTheDocument();
     expect(screen.queryByText('8500%')).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: /category/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('');
+    expect(screen.getAllByRole('option')).toHaveLength(10);
 
     const tabList = screen.getByRole('tablist', { name: 'Review status filters' });
     const pendingTab = within(tabList).getByRole('tab', { name: 'Pending Review' });
@@ -101,12 +111,158 @@ describe('ReviewQueuePage', () => {
     expect(confirmedTab).toHaveAttribute('aria-selected', 'false');
     expect(pendingTab).toHaveAttribute('aria-controls', panel.id);
     expect(panel).toHaveAttribute('aria-labelledby', pendingTab.id);
-    expect(fetchDiscoveryReviewQueueMock).toHaveBeenCalledWith(1, 10, 'PENDING_REVIEW');
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenCalledWith(1, 10, 'PENDING_REVIEW', null);
     expect(screen.getByRole('link', { name: /View finding details/ })).toHaveAttribute(
       'href',
       '/discovery/findings/finding-pending'
     );
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('loads a selected category without showing stale findings', async () => {
+    const user = userEvent.setup();
+    let resolveInsurance!: (payload: PaginatedEvidenceFindingResponse) => void;
+    const insuranceRequest = new Promise<PaginatedEvidenceFindingResponse>((resolve) => {
+      resolveInsurance = resolve;
+    });
+    fetchDiscoveryReviewQueueMock.mockImplementation(
+      (
+        _page: number,
+        _pageSize: number,
+        status: DiscoveryReviewStatus,
+        category: DiscoveryFindingCategory | null
+      ) => category === 'INSURANCE_INDICATOR' ? insuranceRequest : Promise.resolve(queuePayload(status))
+    );
+
+    renderReviewQueue();
+
+    expect(await screen.findByText('Retirement Indicator', { selector: '.category-badge' })).toBeInTheDocument();
+    await selectCategory(user, 'INSURANCE_INDICATOR');
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading discovery review queue');
+    expect(screen.queryByText('Retirement Indicator', { selector: '.category-badge' })).not.toBeInTheDocument();
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
+      1,
+      10,
+      'PENDING_REVIEW',
+      'INSURANCE_INDICATOR'
+    );
+
+    await act(async () => {
+      resolveInsurance({
+        ...queuePayload('PENDING_REVIEW'),
+        items: [{ ...findingsByStatus.PENDING_REVIEW, category: 'INSURANCE_INDICATOR' }],
+      });
+    });
+
+    expect(await screen.findByText('Insurance Indicator', { selector: '.category-badge' })).toBeInTheDocument();
+  });
+
+  it('resets pagination for category and status changes while preserving filtered navigation', async () => {
+    const user = userEvent.setup();
+    fetchDiscoveryReviewQueueMock.mockImplementation(
+      (
+        page: number,
+        pageSize: number,
+        status: DiscoveryReviewStatus,
+        category: DiscoveryFindingCategory | null
+      ): Promise<PaginatedEvidenceFindingResponse> => Promise.resolve({
+        items: [{
+          ...findingsByStatus[status],
+          finding_id: `${status}-${category ?? 'all'}-${page}`,
+          category: category ?? findingsByStatus[status].category,
+        }],
+        total_count: 2,
+        page,
+        page_size: pageSize,
+        total_pages: 2,
+      })
+    );
+
+    renderReviewQueue();
+
+    await screen.findByText('Retirement Indicator', { selector: '.category-badge' });
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Page 2 of 2 (2 items)')).toBeInTheDocument();
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
+      2,
+      10,
+      'PENDING_REVIEW',
+      null
+    );
+
+    await selectCategory(user, 'INSURANCE_INDICATOR');
+    await waitFor(() => expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
+      1,
+      10,
+      'PENDING_REVIEW',
+      'INSURANCE_INDICATOR'
+    ));
+    expect(await screen.findByText('Page 1 of 2 (2 items)')).toBeInTheDocument();
+    expect(await screen.findByText('Insurance Indicator', { selector: '.category-badge' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Page 2 of 2 (2 items)')).toBeInTheDocument();
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
+      2,
+      10,
+      'PENDING_REVIEW',
+      'INSURANCE_INDICATOR'
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Previous' }));
+    expect(await screen.findByText('Page 1 of 2 (2 items)')).toBeInTheDocument();
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
+      1,
+      10,
+      'PENDING_REVIEW',
+      'INSURANCE_INDICATOR'
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Page 2 of 2 (2 items)')).toBeInTheDocument();
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
+      2,
+      10,
+      'PENDING_REVIEW',
+      'INSURANCE_INDICATOR'
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Confirmed' }));
+    await waitFor(() => expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
+      1,
+      10,
+      'CONFIRMED',
+      'INSURANCE_INDICATOR'
+    ));
+    expect(await screen.findByText('Page 1 of 2 (2 items)')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Reopen' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('INSURANCE_INDICATOR');
+  });
+
+  it('shows a filter-specific empty state', async () => {
+    const user = userEvent.setup();
+    fetchDiscoveryReviewQueueMock.mockImplementation(
+      (
+        _page: number,
+        _pageSize: number,
+        status: DiscoveryReviewStatus,
+        category: DiscoveryFindingCategory | null
+      ) => Promise.resolve(category ? {
+        items: [],
+        total_count: 0,
+        page: 1,
+        page_size: 10,
+        total_pages: 0,
+      } : queuePayload(status))
+    );
+
+    renderReviewQueue();
+
+    await screen.findByText('Retirement Indicator', { selector: '.category-badge' });
+    await selectCategory(user, 'BANKING_INDICATOR');
+
+    expect(await screen.findByText('No pending review findings match Banking Indicator.')).toBeInTheDocument();
   });
 
   it('does not show pending findings or actions while a different status tab loads', async () => {
@@ -123,21 +279,21 @@ describe('ReviewQueuePage', () => {
 
     renderReviewQueue();
 
-    expect(await screen.findByText('Retirement Indicator')).toBeInTheDocument();
+    expect(await screen.findByText('Retirement Indicator', { selector: '.category-badge' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Confirmed' }));
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading discovery review queue');
-    expect(screen.queryByText('Retirement Indicator')).not.toBeInTheDocument();
+    expect(screen.queryByText('Retirement Indicator', { selector: '.category-badge' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
-    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(1, 10, 'CONFIRMED');
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(1, 10, 'CONFIRMED', null);
 
     await act(async () => {
       resolveConfirmed(queuePayload('CONFIRMED'));
     });
 
-    expect(await screen.findByText('Insurance Indicator')).toBeInTheDocument();
+    expect(await screen.findByText('Insurance Indicator', { selector: '.category-badge' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reopen' })).toBeInTheDocument();
     expect(screen.getByRole('tabpanel', { name: 'Confirmed' })).toBeInTheDocument();
   });
@@ -162,7 +318,7 @@ describe('ReviewQueuePage', () => {
     }
 
     const category = tab === 'PENDING_REVIEW' ? 'Retirement Indicator' : 'Insurance Indicator';
-    expect(await screen.findByText(category)).toBeInTheDocument();
+    expect(await screen.findByText(category, { selector: '.category-badge' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: action }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -188,7 +344,59 @@ describe('ReviewQueuePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Retry' }));
 
-    expect(await screen.findByText('Retirement Indicator')).toBeInTheDocument();
+    expect(await screen.findByText('Retirement Indicator', { selector: '.category-badge' })).toBeInTheDocument();
     await waitFor(() => expect(fetchDiscoveryReviewQueueMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('retains the selected category when retrying a failed filtered request', async () => {
+    const user = userEvent.setup();
+    fetchDiscoveryReviewQueueMock
+      .mockResolvedValueOnce(queuePayload('PENDING_REVIEW'))
+      .mockRejectedValueOnce(new ApiError('C:\\private\\filtered-secret.txt', 500))
+      .mockResolvedValueOnce({
+        ...queuePayload('PENDING_REVIEW'),
+        items: [{ ...findingsByStatus.PENDING_REVIEW, category: 'PROPERTY_INDICATOR' }],
+      });
+
+    renderReviewQueue();
+
+    await screen.findByText('Retirement Indicator', { selector: '.category-badge' });
+    await selectCategory(user, 'PROPERTY_INDICATOR');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load the review queue');
+    expect(screen.queryByText(/filtered-secret/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Property Indicator', { selector: '.category-badge' })).toBeInTheDocument();
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
+      1,
+      10,
+      'PENDING_REVIEW',
+      'PROPERTY_INDICATOR'
+    );
+  });
+
+  it('remains protected by the existing authentication boundary', async () => {
+    const queryClient = createQueryClient();
+    vi.stubGlobal('fetch', vi.fn());
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/discovery/review']}>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<h1>Sign in required</h1>} />
+              <Route element={<ProtectedRoute />}>
+                <Route path="/discovery/review" element={<ReviewQueuePage />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Sign in required' })).toBeInTheDocument();
+    expect(fetchDiscoveryReviewQueueMock).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

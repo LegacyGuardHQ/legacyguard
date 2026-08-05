@@ -20,6 +20,10 @@ from app.models.discovery import (
     EvidenceFinding,
 )
 from app.models.document import Document
+from app.services.discovery_categories import (
+    INSURANCE_INDICATOR,
+    RETIREMENT_INDICATOR,
+)
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -49,7 +53,15 @@ def _user_id(token: str) -> str:
     return client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
 
 
-def _seed_scan_with_findings(user_id: str, scan_id: str, statuses: list[str]) -> None:
+def _seed_scan_with_findings(
+    user_id: str,
+    scan_id: str,
+    statuses: list[str],
+    categories: list[str] | None = None,
+) -> None:
+    if categories is not None:
+        assert len(categories) == len(statuses)
+
     db = SessionLocal()
     try:
         db.add(
@@ -76,7 +88,11 @@ def _seed_scan_with_findings(user_id: str, scan_id: str, statuses: list[str]) ->
                 id=f"{scan_id}-finding-{index}",
                 scan_id=scan_id,
                 document_id=document_id,
-                category="RETIREMENT_INDICATOR" if index % 2 == 0 else "INSURANCE_INDICATOR",
+                category=(
+                    categories[index]
+                    if categories is not None
+                    else RETIREMENT_INDICATOR if index % 2 == 0 else INSURANCE_INDICATOR
+                ),
                 confidence_score=80 + index,
                 review_status=review_status,
                 created_at=datetime.now(timezone.utc) + timedelta(seconds=index),
@@ -192,6 +208,103 @@ def test_review_queue_defaults_to_pending_and_is_paginated() -> None:
     assert all(item["review_status"] == EVIDENCE_REVIEW_STATUS_PENDING_REVIEW for item in payload["items"])
 
 
+def test_review_queue_filters_category_and_status_before_pagination() -> None:
+    token = _token("review-queue-category@example.com")
+    user_id = _user_id(token)
+    _seed_scan_with_findings(
+        user_id,
+        "category-queue",
+        [
+            EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+            EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+            EVIDENCE_REVIEW_STATUS_CONFIRMED,
+            EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+        ],
+        [
+            RETIREMENT_INDICATOR,
+            INSURANCE_INDICATOR,
+            RETIREMENT_INDICATOR,
+            RETIREMENT_INDICATOR,
+        ],
+    )
+
+    response = client.get(
+        "/discovery/findings/review-queue"
+        f"?review_status={EVIDENCE_REVIEW_STATUS_PENDING_REVIEW}"
+        f"&category={RETIREMENT_INDICATOR}&page=2&page_size=1",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_count"] == 2
+    assert payload["total_pages"] == 2
+    assert payload["page"] == 2
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["category"] == RETIREMENT_INDICATOR
+    assert payload["items"][0]["review_status"] == EVIDENCE_REVIEW_STATUS_PENDING_REVIEW
+
+
+def test_review_queue_category_filter_is_owner_scoped_and_privacy_safe() -> None:
+    owner_token = _token("category-owner@example.com")
+    other_token = _token("category-other@example.com")
+    _seed_scan_with_findings(
+        _user_id(owner_token),
+        "category-owner",
+        [EVIDENCE_REVIEW_STATUS_PENDING_REVIEW],
+        [INSURANCE_INDICATOR],
+    )
+    _seed_scan_with_findings(
+        _user_id(other_token),
+        "category-other",
+        [EVIDENCE_REVIEW_STATUS_PENDING_REVIEW] * 2,
+        [INSURANCE_INDICATOR, INSURANCE_INDICATOR],
+    )
+
+    response = client.get(
+        f"/discovery/findings/review-queue?category={INSURANCE_INDICATOR}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_count"] == 1
+    assert [item["finding_id"] for item in payload["items"]] == ["category-owner-finding-0"]
+    assert set(payload["items"][0]) == {
+        "finding_id",
+        "category",
+        "confidence_score",
+        "review_status",
+        "created_at",
+    }
+    assert "private-term" not in str(payload)
+    assert "Sensitive evidence" not in str(payload)
+
+
+def test_review_queue_category_filter_supports_empty_results() -> None:
+    token = _token("category-empty@example.com")
+    _seed_scan_with_findings(
+        _user_id(token),
+        "category-empty",
+        [EVIDENCE_REVIEW_STATUS_PENDING_REVIEW],
+        [RETIREMENT_INDICATOR],
+    )
+
+    response = client.get(
+        f"/discovery/findings/review-queue?category={INSURANCE_INDICATOR}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+        "total_count": 0,
+        "page": 1,
+        "page_size": 20,
+        "total_pages": 0,
+    }
+
+
 def test_review_queue_ownership_filter_applies_before_count_and_pagination() -> None:
     owner_token = _token("queue-owner@example.com")
     other_token = _token("queue-other@example.com")
@@ -232,6 +345,13 @@ def test_review_queue_rejects_invalid_parameters() -> None:
     assert client.get("/discovery/findings/review-queue?page=0", headers=headers).status_code == 422
     assert client.get("/discovery/findings/review-queue?page_size=101", headers=headers).status_code == 422
     assert client.get("/discovery/findings/review-queue?review_status=UNKNOWN", headers=headers).status_code == 422
+    assert client.get("/discovery/findings/review-queue?category=UNKNOWN", headers=headers).status_code == 422
+
+
+def test_review_queue_requires_authentication_with_category_filter() -> None:
+    response = client.get(f"/discovery/findings/review-queue?category={RETIREMENT_INDICATOR}")
+
+    assert response.status_code == 401
 
 
 def test_reopened_finding_returns_to_default_review_queue() -> None:

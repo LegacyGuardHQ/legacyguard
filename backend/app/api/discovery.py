@@ -36,6 +36,7 @@ from app.schemas.assets import AssetCreate, AssetDetailCreate, AssetResponse
 from app.security.auth import get_current_user, get_db
 from app.services.asset_creation import create_asset_record
 from app.services.audit import log_event
+from app.services.discovery_categories import DISCOVERY_CATEGORY_VALUES
 from app.services.discovery_orchestrator import DiscoveryOrchestrationError, DiscoveryOrchestrator
 from app.services.discovery_reports import DiscoveryReportService
 
@@ -360,11 +361,14 @@ def list_discovery_review_queue(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     review_status: str = Query(EVIDENCE_REVIEW_STATUS_PENDING_REVIEW),
+    category: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PaginatedEvidenceFindingResponse:
     if review_status not in EVIDENCE_REVIEW_STATUS_VALUES:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported review status")
+    if category is not None and category not in DISCOVERY_CATEGORY_VALUES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported finding category")
 
     owned_query = (
         db.query(EvidenceFinding)
@@ -374,6 +378,9 @@ def list_discovery_review_queue(
             EvidenceFinding.review_status == review_status,
         )
     )
+    if category is not None:
+        owned_query = owned_query.filter(EvidenceFinding.category == category)
+
     total_count = owned_query.count()
     findings = (
         owned_query

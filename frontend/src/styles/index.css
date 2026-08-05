@@ -429,6 +429,33 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
   flex-wrap: wrap;
 }
 
+.category-filter {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(100%, 250px);
+}
+
+.category-filter label {
+  color: #b8c9da;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.category-filter select {
+  width: 100%;
+  border: 1px solid rgba(145, 184, 220, 0.3);
+  border-radius: 8px;
+  padding: 0.62rem 2.1rem 0.62rem 0.75rem;
+  background: #0b1a2c;
+  color: #f4f8fd;
+  font: inherit;
+}
+
+.category-filter select:focus-visible {
+  outline: 3px solid rgba(114, 217, 234, 0.55);
+  outline-offset: 3px;
+}
+
 .tab-nav {
   display: flex;
   gap: 0.5rem;
@@ -589,16 +616,6 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
   color: #ffffff;
 }
 
-.disabled-action-label {
-  color: #61778f;
-  font-size: 0.82rem;
-  font-style: italic;
-  padding: 0.4rem 0.75rem;
-  background: rgba(145, 184, 220, 0.05);
-  border: 1px dashed rgba(145, 184, 220, 0.2);
-  border-radius: 6px;
-}
-
 .pagination-container {
   display: flex;
   align-items: center;
@@ -611,6 +628,12 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
 .pagination-info {
   color: #8fa5bf;
   font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .category-filter {
+    width: 100%;
+  }
 }
 
 /* Finding Detail Page Styles */

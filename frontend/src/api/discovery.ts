@@ -1,6 +1,7 @@
 import { request } from './client';
 import type {
   DiscoveryDashboardResponse,
+  DiscoveryFindingCategory,
   DiscoveryReportSummaryResponse,
   DiscoveryReviewStatus,
   DiscoverySafeReportResponse,
@@ -61,13 +62,17 @@ export function fetchDiscoveryFinding(findingId: string): Promise<EvidenceFindin
 export function fetchDiscoveryReviewQueue(
   page: number,
   pageSize: number,
-  reviewStatus: DiscoveryReviewStatus = 'PENDING_REVIEW'
+  reviewStatus: DiscoveryReviewStatus = 'PENDING_REVIEW',
+  category?: DiscoveryFindingCategory | null
 ): Promise<PaginatedEvidenceFindingResponse> {
   const params = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize),
     review_status: reviewStatus,
   });
+  if (category) {
+    params.set('category', category);
+  }
   return request<PaginatedEvidenceFindingResponse>(`/discovery/findings/review-queue?${params.toString()}`, {}, true);
 }
 
