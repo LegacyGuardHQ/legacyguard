@@ -112,3 +112,45 @@ export type PaginatedEvidenceFindingResponse = {
 export type EvidenceFindingReviewRequest = {
   review_status: DiscoveryReviewStatus;
 };
+
+export type ManualAssetConversionDetails = {
+  account_number?: string | null;
+  policy_number?: string | null;
+  notes?: string | null;
+  claim_instructions?: string | null;
+};
+
+export type ManualAssetConversionRequest = {
+  asset_name: string;
+  asset_category: string;
+  institution?: string | null;
+  description?: string | null;
+  estimated_value?: number | string | null;
+  ownership_type?: string | null;
+  details?: ManualAssetConversionDetails | null;
+};
+
+export type AssetDetailResponse = {
+  account_number?: string | null;
+  policy_number?: string | null;
+  notes?: string | null;
+  claim_instructions?: string | null;
+};
+
+export type AssetResponse = {
+  id: string;
+  asset_category: string;
+  asset_name: string;
+  institution?: string | null;
+  description?: string | null;
+  estimated_value?: string | null;
+  ownership_type?: string | null;
+  status: string;
+  is_verified: boolean;
+  verification_status: string;
+  verified_at?: string | null;
+  archived_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  details?: AssetDetailResponse | null;
+};
