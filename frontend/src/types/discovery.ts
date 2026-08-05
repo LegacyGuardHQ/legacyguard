@@ -7,6 +7,20 @@ export type DiscoveryScanStatus =
 
 export type DiscoveryReviewStatus = 'PENDING_REVIEW' | 'CONFIRMED' | 'DISMISSED';
 
+export const DISCOVERY_FINDING_CATEGORIES = [
+  'RETIREMENT_INDICATOR',
+  'INSURANCE_INDICATOR',
+  'INVESTMENT_INDICATOR',
+  'EMPLOYMENT_BENEFIT_INDICATOR',
+  'BANKING_INDICATOR',
+  'PROPERTY_INDICATOR',
+  'BENEFICIARY_INDICATOR',
+  'GOVERNMENT_BENEFIT_INDICATOR',
+  'OTHER_FINANCIAL_INDICATOR',
+] as const;
+
+export type DiscoveryFindingCategory = (typeof DISCOVERY_FINDING_CATEGORIES)[number];
+
 export type DiscoveryScanStatusCounts = Record<DiscoveryScanStatus, number>;
 
 export type DiscoveryReviewStatusCounts = Record<DiscoveryReviewStatus, number>;

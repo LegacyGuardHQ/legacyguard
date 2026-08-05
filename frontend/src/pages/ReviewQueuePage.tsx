@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDiscoveryReviewQueue, useUpdateFindingStatus } from '../hooks/useDiscoveryReviewQueue';
 import { usePageTitle } from '../hooks/usePageTitle';
-import type { DiscoveryReviewStatus } from '../types/discovery';
+import {
+  DISCOVERY_FINDING_CATEGORIES,
+  type DiscoveryFindingCategory,
+  type DiscoveryReviewStatus,
+} from '../types/discovery';
 
 const PAGE_SIZE = 10;
 const REVIEW_PANEL_ID = 'review-queue-panel';
@@ -24,12 +28,17 @@ function formatCategory(category: string): string {
     .join(' ');
 }
 
+function isDiscoveryFindingCategory(value: string): value is DiscoveryFindingCategory {
+  return DISCOVERY_FINDING_CATEGORIES.some((category) => category === value);
+}
+
 export default function ReviewQueuePage() {
   usePageTitle('Review queue');
   const [activeTab, setActiveTab] = useState<DiscoveryReviewStatus>('PENDING_REVIEW');
+  const [category, setCategory] = useState<DiscoveryFindingCategory | null>(null);
   const [page, setPage] = useState(1);
 
-  const scansQuery = useDiscoveryReviewQueue(page, PAGE_SIZE, activeTab);
+  const scansQuery = useDiscoveryReviewQueue(page, PAGE_SIZE, activeTab, category);
   const updateMutation = useUpdateFindingStatus();
   const activeTabConfig = REVIEW_TABS.find((tab) => tab.status === activeTab) ?? REVIEW_TABS[0];
 
@@ -64,6 +73,13 @@ export default function ReviewQueuePage() {
     updateMutation.mutate({ findingId, reviewStatus: newStatus });
   };
 
+  const handleCategoryChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    updateMutation.reset();
+    const nextCategory = event.target.value;
+    setCategory(isDiscoveryFindingCategory(nextCategory) ? nextCategory : null);
+    setPage(1);
+  };
+
   const handlePageChange = (nextPage: number) => {
     updateMutation.reset();
     setPage(nextPage);
@@ -72,6 +88,7 @@ export default function ReviewQueuePage() {
   const totalPages = scansQuery.data?.total_pages || 1;
   const items = scansQuery.data?.items || [];
   const totalCount = scansQuery.data?.total_count || 0;
+  const selectedCategoryLabel = category ? formatCategory(category) : null;
 
   return (
     <main className="dashboard-container">
@@ -101,6 +118,22 @@ export default function ReviewQueuePage() {
               {tab.label}
             </button>
           ))}
+        </div>
+        <div className="category-filter">
+          <label htmlFor="review-category-filter">Category</label>
+          <select
+            id="review-category-filter"
+            value={category ?? ''}
+            onChange={handleCategoryChange}
+            disabled={scansQuery.isFetching || updateMutation.isPending}
+          >
+            <option value="">All categories</option>
+            {DISCOVERY_FINDING_CATEGORIES.map((value) => (
+              <option key={value} value={value}>
+                {formatCategory(value)}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -140,11 +173,15 @@ export default function ReviewQueuePage() {
             {items.length === 0 ? (
               <div className="card empty-card">
                 <h3>No findings found</h3>
-                <p>
-                  {activeTab === 'PENDING_REVIEW' && 'There are no findings currently awaiting review.'}
-                  {activeTab === 'CONFIRMED' && 'No findings have been confirmed yet.'}
-                  {activeTab === 'DISMISSED' && 'No findings have been dismissed.'}
-                </p>
+                {selectedCategoryLabel ? (
+                  <p>No {activeTabConfig.label.toLowerCase()} findings match {selectedCategoryLabel}.</p>
+                ) : (
+                  <p>
+                    {activeTab === 'PENDING_REVIEW' && 'There are no findings currently awaiting review.'}
+                    {activeTab === 'CONFIRMED' && 'No findings have been confirmed yet.'}
+                    {activeTab === 'DISMISSED' && 'No findings have been dismissed.'}
+                  </p>
+                )}
               </div>
             ) : (
               <div className="queue-list" role="feed" aria-label={`${activeTabConfig.label} findings`}>
@@ -217,9 +254,6 @@ export default function ReviewQueuePage() {
                             >
                               Dismiss
                             </button>
-                            <span className="disabled-action-label" title="Manual asset creation will be implemented in Phase 4B.7">
-                              Asset creation (Phase 4B.7)
-                            </span>
                           </>
                         )}
 
