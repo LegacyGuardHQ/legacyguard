@@ -2,9 +2,14 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useDiscoveryFindingDetail } from '../hooks/useDiscoveryFindingDetail';
+import { useManualAssetConversion } from '../hooks/useManualAssetConversion';
 import { useUpdateFindingStatus } from '../hooks/useDiscoveryReviewQueue';
 import { usePageTitle } from '../hooks/usePageTitle';
-import type { DiscoveryReviewStatus } from '../types/discovery';
+import type {
+  DiscoveryReviewStatus,
+  ManualAssetConversionDetails,
+  ManualAssetConversionRequest,
+} from '../types/discovery';
 
 function formatLabel(value: string): string {
   return value
@@ -97,6 +102,175 @@ function ReviewActions({ findingId, status, disabled, onUpdate }: ReviewActionsP
         </>
       ) : null}
     </div>
+  );
+}
+
+type ConversionFormFields = {
+  asset_name: string;
+  asset_category: string;
+  institution: string;
+  description: string;
+  estimated_value: string;
+  ownership_type: string;
+  account_number: string;
+  policy_number: string;
+  notes: string;
+  claim_instructions: string;
+};
+
+function trimmedValue(formData: FormData, name: keyof ConversionFormFields): string {
+  return String(formData.get(name) ?? '').trim();
+}
+
+function buildConversionPayload(formData: FormData):
+  | { payload: ManualAssetConversionRequest; error: null }
+  | { payload: null; error: string } {
+  const assetName = trimmedValue(formData, 'asset_name');
+  const assetCategory = trimmedValue(formData, 'asset_category');
+  if (!assetName || !assetCategory) {
+    return { payload: null, error: 'Asset name and category are required.' };
+  }
+
+  const estimatedValueText = trimmedValue(formData, 'estimated_value');
+  const estimatedValue = estimatedValueText ? Number(estimatedValueText) : undefined;
+  if (estimatedValue !== undefined && (!Number.isFinite(estimatedValue) || estimatedValue < 0)) {
+    return { payload: null, error: 'Estimated value must be zero or greater.' };
+  }
+
+  const payload: ManualAssetConversionRequest = {
+    asset_name: assetName,
+    asset_category: assetCategory,
+  };
+  const optionalFields = ['institution', 'description', 'ownership_type'] as const;
+  optionalFields.forEach((field) => {
+    const value = trimmedValue(formData, field);
+    if (value) payload[field] = value;
+  });
+  if (estimatedValue !== undefined) payload.estimated_value = estimatedValue;
+
+  const details: ManualAssetConversionDetails = {};
+  const detailFields = ['account_number', 'policy_number', 'notes', 'claim_instructions'] as const;
+  detailFields.forEach((field) => {
+    const value = trimmedValue(formData, field);
+    if (value) details[field] = value;
+  });
+  if (Object.keys(details).length > 0) payload.details = details;
+
+  return { payload, error: null };
+}
+
+function ManualAssetConversion({ findingId }: { findingId: string }) {
+  const conversionMutation = useManualAssetConversion(findingId);
+  const [validationError, setValidationError] = React.useState<string | null>(null);
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (conversionMutation.isPending || conversionMutation.isSuccess) return;
+
+    setValidationError(null);
+    conversionMutation.reset();
+    const result = buildConversionPayload(new FormData(event.currentTarget));
+    if (!result.payload) {
+      setValidationError(result.error);
+      return;
+    }
+    conversionMutation.mutate(result.payload);
+  };
+
+  let mutationError = 'Unable to create this asset. Please try again.';
+  if (conversionMutation.error instanceof ApiError && conversionMutation.error.status === 409) {
+    mutationError = conversionMutation.error.detail === 'An asset has already been created from this finding'
+      ? 'An asset has already been created from this finding.'
+      : 'This finding is no longer eligible for asset conversion.';
+  }
+
+  if (conversionMutation.isSuccess) {
+    return (
+      <section className="finding-detail-card conversion-card" aria-labelledby="conversion-title">
+        <div>
+          <p className="eyebrow">Manual asset conversion</p>
+          <h2 id="conversion-title">Asset created for review</h2>
+          <p>
+            This asset remains unverified and requires your review before it should be relied upon.
+          </p>
+        </div>
+        <dl className="conversion-result" aria-live="polite">
+          <div>
+            <dt>Asset reference</dt>
+            <dd className="resource-id">{conversionMutation.data.id}</dd>
+          </div>
+          <div>
+            <dt>Verification status</dt>
+            <dd>{formatLabel(conversionMutation.data.verification_status)}</dd>
+          </div>
+        </dl>
+      </section>
+    );
+  }
+
+  return (
+    <section className="finding-detail-card conversion-card" aria-labelledby="conversion-title">
+      <div>
+        <p className="eyebrow">Manual asset conversion</p>
+        <h2 id="conversion-title">Create an asset for review</h2>
+        <p>
+          This user-initiated step creates an unverified asset that still requires review. Account and policy details are optional; enter them only when useful.
+        </p>
+      </div>
+
+      {validationError ? <div className="finding-feedback finding-feedback-error" role="alert">{validationError}</div> : null}
+      {conversionMutation.isError ? (
+        <div className="finding-feedback finding-feedback-error" role="alert">{mutationError}</div>
+      ) : null}
+
+      <form className="conversion-form" onSubmit={handleSubmit} noValidate>
+        <div className="conversion-field">
+          <label htmlFor="asset-name">Asset name <span aria-hidden="true">*</span></label>
+          <input id="asset-name" name="asset_name" type="text" required disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field">
+          <label htmlFor="asset-category">Asset category <span aria-hidden="true">*</span></label>
+          <input id="asset-category" name="asset_category" type="text" required disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field">
+          <label htmlFor="asset-institution">Institution <span className="optional-label">Optional</span></label>
+          <input id="asset-institution" name="institution" type="text" disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field">
+          <label htmlFor="asset-value">Estimated value <span className="optional-label">Optional</span></label>
+          <input id="asset-value" name="estimated_value" type="number" min="0" step="any" disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field conversion-field-wide">
+          <label htmlFor="asset-description">Description <span className="optional-label">Optional</span></label>
+          <textarea id="asset-description" name="description" rows={3} disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field">
+          <label htmlFor="asset-ownership">Ownership type <span className="optional-label">Optional</span></label>
+          <input id="asset-ownership" name="ownership_type" type="text" disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field">
+          <label htmlFor="asset-account-number">Account number <span className="optional-label">Optional</span></label>
+          <input id="asset-account-number" name="account_number" type="text" disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field">
+          <label htmlFor="asset-policy-number">Policy number <span className="optional-label">Optional</span></label>
+          <input id="asset-policy-number" name="policy_number" type="text" disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field conversion-field-wide">
+          <label htmlFor="asset-notes">Notes <span className="optional-label">Optional</span></label>
+          <textarea id="asset-notes" name="notes" rows={3} disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-field conversion-field-wide">
+          <label htmlFor="asset-claim-instructions">Claim instructions <span className="optional-label">Optional</span></label>
+          <textarea id="asset-claim-instructions" name="claim_instructions" rows={3} disabled={conversionMutation.isPending} />
+        </div>
+        <div className="conversion-submit-row">
+          <button className="btn btn-success" type="submit" disabled={conversionMutation.isPending}>
+            {conversionMutation.isPending ? 'Creating asset…' : 'Create asset for review'}
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }
 
@@ -273,6 +447,10 @@ export default function FindingDetailPage() {
           onUpdate={handleUpdateStatus}
         />
       </section>
+
+      {finding.review_status === 'CONFIRMED' ? (
+        <ManualAssetConversion findingId={finding.finding_id} />
+      ) : null}
 
       <footer className="finding-detail-footer">
         <Link className="text-link" to="/discovery/review">

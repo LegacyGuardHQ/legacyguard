@@ -1,5 +1,6 @@
 import { request } from './client';
 import type {
+  AssetResponse,
   DiscoveryDashboardResponse,
   DiscoveryFindingCategory,
   DiscoveryReportSummaryResponse,
@@ -11,6 +12,7 @@ import type {
   EvidenceFindingResponse,
   PaginatedDiscoveryScansResponse,
   PaginatedEvidenceFindingResponse,
+  ManualAssetConversionRequest,
 } from '../types/discovery';
 
 export function fetchDiscoveryDashboard(): Promise<DiscoveryDashboardResponse> {
@@ -85,6 +87,20 @@ export function updateDiscoveryFindingStatus(
     {
       method: 'PATCH',
       body: JSON.stringify({ review_status: reviewStatus }),
+    },
+    true
+  );
+}
+
+export function createAssetFromDiscoveryFinding(
+  findingId: string,
+  payload: ManualAssetConversionRequest
+): Promise<AssetResponse> {
+  return request<AssetResponse>(
+    `/discovery/findings/${encodeURIComponent(findingId)}/assets`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
     },
     true
   );
