@@ -45,6 +45,9 @@ const sampleScan: DiscoveryScanStatusResponse = {
   documents_processed: 2,
   created_at: '2026-08-01T10:00:00Z',
   completed_at: '2026-08-01T10:05:00Z',
+  lifecycle_state: 'COMPLETED',
+  recovered_from_stale: false,
+  recovered_at: null,
 };
 
 const sampleRunningScan: DiscoveryScanStatusResponse = {
@@ -53,6 +56,17 @@ const sampleRunningScan: DiscoveryScanStatusResponse = {
   documents_processed: 1,
   created_at: '2026-08-01T10:00:00Z',
   completed_at: null,
+  lifecycle_state: 'RUNNING',
+  recovered_from_stale: false,
+  recovered_at: null,
+};
+
+const sampleRecoveredScan: DiscoveryScanStatusResponse = {
+  ...sampleScan,
+  status: 'COMPLETE',
+  lifecycle_state: 'COMPLETED',
+  recovered_from_stale: true,
+  recovered_at: '2026-08-01T10:06:00Z',
 };
 
 const sampleSummary: DiscoveryReportSummaryResponse = {
@@ -234,6 +248,21 @@ describe('ScanDetailPage', () => {
     renderScanDetailPage();
 
     expect(await screen.findByRole('status')).toHaveTextContent('Discovery processing is active');
+  });
+
+  it('renders lifecycle and recovery messaging without technical error details', async () => {
+    fetchScanMock.mockResolvedValue(sampleRecoveredScan);
+    fetchSummaryMock.mockResolvedValue(sampleSummary);
+    fetchReportMock.mockResolvedValue(sampleReport);
+    fetchDocumentsMock.mockResolvedValue(sampleDocuments);
+    fetchFindingsMock.mockResolvedValue(sampleFindings);
+
+    renderScanDetailPage();
+
+    expect(await screen.findByText('Completed successfully')).toBeInTheDocument();
+    expect(screen.getByText(/Recovered from a stale running state/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recovered at/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Traceback|Exception|internal error/i)).not.toBeInTheDocument();
   });
 
   it('stays behind authentication boundary for protected routes', async () => {

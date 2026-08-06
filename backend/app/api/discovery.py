@@ -1,9 +1,17 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.audit_log import AuditLog
 from app.models.discovery import (
+    DISCOVERY_SCAN_STATUS_COMPLETE,
+    DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
+    DISCOVERY_SCAN_STATUS_FAILED,
+    DISCOVERY_SCAN_STATUS_PENDING,
+    DISCOVERY_SCAN_STATUS_RUNNING,
     DISCOVERY_SCAN_STATUS_VALUES,
     EVIDENCE_REVIEW_STATUS_CONFIRMED,
     EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
@@ -49,13 +57,49 @@ def _scan_response(scan: DiscoveryScan) -> DiscoveryScanResponse:
     return DiscoveryScanResponse(scan_id=scan.id, status=scan.status, created_at=scan.created_at)
 
 
-def _scan_status_response(scan: DiscoveryScan) -> DiscoveryScanStatusResponse:
+def _derive_lifecycle_state(status: str) -> str:
+    if status == DISCOVERY_SCAN_STATUS_PENDING:
+        return "QUEUED"
+    if status == DISCOVERY_SCAN_STATUS_RUNNING:
+        return "RUNNING"
+    if status == DISCOVERY_SCAN_STATUS_COMPLETE:
+        return "COMPLETED"
+    if status == DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS:
+        return "COMPLETED_WITH_WARNINGS"
+    if status == DISCOVERY_SCAN_STATUS_FAILED:
+        return "FAILED"
+    return "QUEUED"
+
+
+def _get_scan_recovery_metadata(db: Session, *, scan: DiscoveryScan, user_id: str) -> tuple[bool, datetime | None]:
+    recovery_audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.user_id == user_id,
+            AuditLog.event_type == "discovery_started",
+            AuditLog.details == "Discovery scan recovered from stale running state",
+        )
+        .order_by(AuditLog.timestamp.asc(), AuditLog.id.asc())
+        .all()
+    )
+    for audit_entry in recovery_audit:
+        metadata = audit_entry.event_metadata or {}
+        if metadata.get("scan_id") == scan.id:
+            return True, audit_entry.timestamp
+    return False, None
+
+
+def _scan_status_response(db: Session, scan: DiscoveryScan, user_id: str) -> DiscoveryScanStatusResponse:
+    recovered_from_stale, recovered_at = _get_scan_recovery_metadata(db, scan=scan, user_id=user_id)
     return DiscoveryScanStatusResponse(
         scan_id=scan.id,
         status=scan.status,
         documents_processed=scan.documents_processed,
         created_at=scan.created_at,
         completed_at=scan.completed_at,
+        lifecycle_state=_derive_lifecycle_state(scan.status),
+        recovered_from_stale=recovered_from_stale,
+        recovered_at=recovered_at,
     )
 
 
@@ -260,7 +304,7 @@ def get_discovery_scan_status(
     db: Session = Depends(get_db),
 ) -> DiscoveryScanStatusResponse:
     scan = _get_owned_scan(db, scan_id, current_user.id)
-    return _scan_status_response(scan)
+    return _scan_status_response(db, scan, current_user.id)
 
 
 @router.get("/scans/{scan_id}/summary", response_model=DiscoveryReportSummaryResponse)

@@ -5,6 +5,8 @@ export type DiscoveryScanStatus =
   | 'COMPLETED_WITH_WARNINGS'
   | 'FAILED';
 
+export type DiscoveryLifecycleState = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_WARNINGS' | 'FAILED';
+
 export type DiscoveryReviewStatus = 'PENDING_REVIEW' | 'CONFIRMED' | 'DISMISSED';
 
 export const DISCOVERY_FINDING_CATEGORIES = [
@@ -61,6 +63,9 @@ export type DiscoveryScanStatusResponse = {
   documents_processed: number;
   created_at: string;
   completed_at: string | null;
+  lifecycle_state: DiscoveryLifecycleState;
+  recovered_from_stale: boolean;
+  recovered_at: string | null;
 };
 
 export type DiscoveryReportSummaryResponse = {
