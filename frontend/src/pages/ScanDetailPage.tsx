@@ -43,6 +43,22 @@ function formatDocumentWarning(warningCode: string | null) {
   return 'Processing notice';
 }
 
+function formatLifecycleMessage(status: string, lifecycleState: string, recoveredFromStale: boolean) {
+  if (recoveredFromStale) {
+    if (status === 'COMPLETE' || status === 'COMPLETED_WITH_WARNINGS') {
+      return 'Completed successfully';
+    }
+    return 'Recovered from a stale running state';
+  }
+
+  if (lifecycleState === 'QUEUED') return 'Queued for processing';
+  if (lifecycleState === 'RUNNING') return 'Discovery processing is active';
+  if (lifecycleState === 'COMPLETED') return 'Completed successfully';
+  if (lifecycleState === 'COMPLETED_WITH_WARNINGS') return 'Completed with warnings';
+  if (lifecycleState === 'FAILED') return 'Failed';
+  return 'Processing status available';
+}
+
 export default function ScanDetailPage() {
   const { scanId = '' } = useParams<{ scanId: string }>();
   usePageTitle('Scan details');
@@ -81,6 +97,7 @@ export default function ScanDetailPage() {
   }
 
   const isScanActive = scan.status === 'PENDING' || scan.status === 'RUNNING';
+  const lifecycleMessage = formatLifecycleMessage(scan.status, scan.lifecycle_state, scan.recovered_from_stale);
 
   return (
     <div className="scan-detail">
@@ -108,6 +125,25 @@ export default function ScanDetailPage() {
           <div className="active-scan-banner" role="status" aria-live="polite">
             <span className="spinner-dot" aria-hidden="true">●</span>
             <span>Discovery processing is active. Updating details automatically…</span>
+          </div>
+        ) : null}
+
+        <div className="trust-note" aria-live="polite">
+          <p>
+            <strong>Lifecycle:</strong> {lifecycleMessage}
+          </p>
+        </div>
+
+        {scan.recovered_from_stale ? (
+          <div className="trust-note" aria-live="polite">
+            <p>
+              <strong>Recovery notice:</strong> Recovered from a stale running state.
+            </p>
+            {scan.recovered_at ? (
+              <p>
+                <strong>Recovered at:</strong> {formatTimestamp(scan.recovered_at)}
+              </p>
+            ) : null}
           </div>
         ) : null}
 

@@ -15,6 +15,7 @@ from app.database.connection import SessionLocal
 from app.main import app
 from app.models.discovery import EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, DiscoveryScan, EvidenceFinding
 from app.models.document import Document
+from app.services.audit import log_event
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -137,7 +138,63 @@ def test_scan_status_response_schema_is_correct() -> None:
 
     response = client.get("/discovery/scans/scan-status", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
-    assert set(response.json().keys()) == {"scan_id", "status", "documents_processed", "created_at", "completed_at"}
+    payload = response.json()
+    assert set(payload.keys()) == {
+        "scan_id",
+        "status",
+        "documents_processed",
+        "created_at",
+        "completed_at",
+        "lifecycle_state",
+        "recovered_from_stale",
+        "recovered_at",
+    }
+    assert payload["lifecycle_state"] == "RUNNING"
+    assert payload["recovered_from_stale"] is False
+    assert payload["recovered_at"] is None
+    assert "matched_terms" not in payload
+    assert "evidence_excerpt" not in payload
+    assert "storage_path" not in payload
+
+
+def test_scan_status_response_surfaces_recovery_metadata_from_controlled_audit_event() -> None:
+    token = _token("status-recovery@example.com")
+    user_id = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+    db = SessionLocal()
+    try:
+        scan = DiscoveryScan(
+            id="scan-recovery",
+            user_id=user_id,
+            status="COMPLETE",
+            documents_processed=1,
+            created_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+        )
+        db.add(scan)
+        db.commit()
+        log_event(
+            db,
+            user_id=user_id,
+            event_type="discovery_started",
+            details="Discovery scan recovered from stale running state",
+            metadata={
+                "scan_id": scan.id,
+                "old_status": "RUNNING",
+                "new_status": "PENDING",
+            },
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/discovery/scans/scan-recovery", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["lifecycle_state"] == "COMPLETED"
+    assert payload["recovered_from_stale"] is True
+    assert payload["recovered_at"] is not None
+    assert payload["status"] == "COMPLETE"
+
 
 def test_safe_report_endpoint_returns_only_summary_fields() -> None:
     token = _token("report-owner@example.com")

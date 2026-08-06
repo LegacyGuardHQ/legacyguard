@@ -40,6 +40,14 @@ DiscoveryDocumentWarning = Literal[
     "UNSUPPORTED_EXTRACTION",
 ]
 
+DiscoveryLifecycleState = Literal[
+    "QUEUED",
+    "RUNNING",
+    "COMPLETED",
+    "COMPLETED_WITH_WARNINGS",
+    "FAILED",
+]
+
 # Keep the public contract synchronized with the model's controlled values.
 assert set(DiscoveryDocumentStatus.__args__) == {
     DISCOVERY_DOCUMENT_STATUS_PENDING,
@@ -78,6 +86,9 @@ class DiscoveryScanResponse(BaseModel):
 class DiscoveryScanStatusResponse(DiscoveryScanResponse):
     documents_processed: int
     completed_at: datetime | None = None
+    lifecycle_state: DiscoveryLifecycleState
+    recovered_from_stale: bool = Field(default=False, description="Whether the scan was recovered from a stale running state.")
+    recovered_at: datetime | None = None
 
 
 class DiscoveryScanSummaryResponse(BaseModel):
