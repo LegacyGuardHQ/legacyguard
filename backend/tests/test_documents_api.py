@@ -1,6 +1,6 @@
 import hashlib
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -36,7 +36,7 @@ from app.models.discovery_scan_document import (
     DiscoveryScanDocument,
 )
 from app.models.document import Document
-from app.services.discovery_orchestrator import DISCOVERY_FAILED
+from app.services.discovery_orchestrator import DISCOVERY_FAILED, DiscoveryOrchestrator
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -683,6 +683,75 @@ def test_losing_duplicate_background_invocation_does_not_fail_running_scan() -> 
         assert verification_db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan_id).count() == 0
         assert verification_db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan_id).count() == 0
         assert verification_db.query(AuditLog).filter(AuditLog.event_type == DISCOVERY_FAILED).count() == failure_audits_before
+    finally:
+        verification_db.close()
+
+
+def test_background_discovery_recovers_stale_running_scan_without_duplicate_artifacts(monkeypatch) -> None:
+    token = _token("stale-background-discovery@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    user_id = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+
+    db = SessionLocal()
+    try:
+        scan = documents_api.discovery_scan_executor.create_pending(db, user_id=user_id)
+        scan_id = scan.id
+        scan.status = DISCOVERY_SCAN_STATUS_RUNNING
+        scan.started_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        stale_tracking = DiscoveryScanDocument(
+            id="tracking-old",
+            scan_id=scan_id,
+            document_id=document_id,
+            status=DISCOVERY_DOCUMENT_STATUS_FAILED,
+        )
+        stale_finding = EvidenceFinding(
+            id="finding-old",
+            scan_id=scan_id,
+            document_id=document_id,
+            category="OLD_CATEGORY",
+            confidence_score=99.0,
+        )
+        db.add_all([stale_tracking, stale_finding])
+        db.commit()
+    finally:
+        db.close()
+
+    class StubTextProvider:
+        def get_text(self, document):
+            return "retirement rollover"
+
+    class StubDiscoveryEngine:
+        def analyze_text(self, document_text: str):
+            return []
+
+    class StubPrivacyService:
+        def sanitize_evidence(self, *, matched_terms, evidence_excerpt):
+            class Result:
+                sanitized_terms = matched_terms
+                sanitized_excerpt = "sanitized excerpt"
+
+            return Result()
+
+    orchestrator = DiscoveryOrchestrator(
+        text_provider=StubTextProvider(),
+        discovery_engine=StubDiscoveryEngine(),
+        privacy_service=StubPrivacyService(),
+        stale_scan_threshold_seconds=60,
+    )
+    monkeypatch.setattr(documents_api, "discovery_scan_executor", documents_api.DiscoveryScanExecutor(orchestrator))
+
+    documents_api._process_discovery_scan_in_background(scan_id, user_id, document_id)
+
+    verification_db = SessionLocal()
+    try:
+        persisted_scan = verification_db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).one()
+        assert persisted_scan.status == DISCOVERY_SCAN_STATUS_COMPLETE
+        tracked_rows = verification_db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan_id).all()
+        findings = verification_db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan_id).all()
+        assert len(tracked_rows) == 1
+        assert len(findings) == 0
     finally:
         verification_db.close()
 

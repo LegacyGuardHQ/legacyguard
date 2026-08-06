@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database.connection import SessionLocal
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
@@ -38,7 +39,13 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
 document_storage = LocalDocumentStorage()
 malware_scanner: MalwareScanner | None = None
-discovery_scan_executor = DiscoveryScanExecutor(DiscoveryOrchestrator())
+
+def _build_discovery_orchestrator() -> DiscoveryOrchestrator:
+    return DiscoveryOrchestrator(stale_scan_threshold_seconds=settings.discovery_stale_scan_threshold_seconds)
+
+
+default_discovery_scan_executor = DiscoveryScanExecutor(_build_discovery_orchestrator())
+discovery_scan_executor = default_discovery_scan_executor
 
 
 def _get_owned_asset_if_supplied(db: Session, asset_id: str | None, user_id: str) -> Asset | None:
