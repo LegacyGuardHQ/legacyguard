@@ -4,7 +4,7 @@
 
 Remote: https://github.com/jh505tt-create/legacyguard.git
 
-Current master: `0b179b8f718228bee45647e0b520824807fbad45`
+Current master: `d815bdc318e6cc0ccc4154626ef1df9e44ba1fce`
 
 Development uses one feature branch and one pull request per milestone. Branches are created from an updated, clean `master` branch.
 
@@ -40,6 +40,8 @@ LegacyGuard is a privacy-first financial asset discovery platform designed to he
 - Phase 4B.7 — Review Queue Filtering
 - Phase 4B.8 — Manual Asset Conversion UI
 - GitHub Actions CI
+- Phase 5.1 — Dependency Baseline and CI Health
+- Phase 5.2 — Discovery Reliability Hardening
 
 Manual asset conversion is explicitly user-initiated. Converted assets remain `NEEDS_REVIEW`; LegacyGuard does not automatically verify them.
 
@@ -59,9 +61,9 @@ Manual asset conversion is explicitly user-initiated. Converted assets remain `N
 
 ## Current Roadmap
 
-Completed: Phase 4A and Phase 4B.1 through Phase 4B.8.
+Completed: Phase 4A, Phase 4B.1 through Phase 4B.8, Phase 5.1, and Phase 5.2.
 
-Next milestone: Roadmap review required
+Next milestone: Phase 5.3 — Discovery Lifecycle Telemetry and Safe Status Visibility.
 
 ## Development Workflow
 
