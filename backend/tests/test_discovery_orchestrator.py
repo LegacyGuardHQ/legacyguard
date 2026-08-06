@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -10,6 +11,8 @@ os.environ.setdefault("ENCRYPTION_KEY", "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWF
 os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
+from app.api import documents as documents_api
+from app.config import settings
 from app.database.connection import Base, SessionLocal, engine
 from app.models.audit_log import AuditLog
 from app.models.discovery import (
@@ -124,6 +127,14 @@ def _create_user_and_document(user_id: str = "user-1", document_id: str = "doc-1
         db.close()
 
 
+def test_documents_api_builds_discovery_orchestrator_with_configured_stale_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "discovery_stale_scan_threshold_seconds", 123)
+
+    orchestrator = documents_api._build_discovery_orchestrator()
+
+    assert orchestrator.stale_scan_threshold_seconds == 123
+
+
 def test_orchestrator_creates_discovery_scan() -> None:
     _user_id, document_id = _create_user_and_document()
     db = SessionLocal()
@@ -205,6 +216,57 @@ def test_orchestrator_rejects_processing_a_nonpending_scan() -> None:
                 user_id="user-1",
                 document_ids=[document_id],
             )
+    finally:
+        db.close()
+
+
+def test_orchestrator_recovers_stale_running_scans_without_duplicate_artifacts() -> None:
+    _user_id, document_id = _create_user_and_document()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=FakeTextProvider(),
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+            stale_scan_threshold_seconds=60,
+        )
+
+        scan = orchestrator.create_scan(db, user_id="user-1")
+        scan.status = DISCOVERY_SCAN_STATUS_RUNNING
+        scan.started_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        stale_tracking = DiscoveryScanDocument(
+            id="tracking-old",
+            scan_id=scan.id,
+            document_id=document_id,
+            status=DISCOVERY_DOCUMENT_STATUS_COMPLETED,
+        )
+        stale_finding = EvidenceFinding(
+            id="finding-old",
+            scan_id=scan.id,
+            document_id=document_id,
+            category="OLD_CATEGORY",
+            confidence_score=99.0,
+        )
+        db.add_all([stale_tracking, stale_finding])
+        db.commit()
+        stale_tracking_id = stale_tracking.id
+        stale_finding_id = stale_finding.id
+
+        completed_scan = orchestrator.process_scan(
+            db,
+            scan_id=scan.id,
+            user_id="user-1",
+            document_ids=[document_id],
+        )
+
+        assert completed_scan.status == DISCOVERY_SCAN_STATUS_COMPLETE
+        assert completed_scan.documents_processed == 1
+        tracked_rows = db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan.id).all()
+        findings = db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan.id).all()
+        assert len(tracked_rows) == 1
+        assert len(findings) == 1
+        assert tracked_rows[0].id != stale_tracking_id
+        assert findings[0].id != stale_finding_id
     finally:
         db.close()
 

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     environment: str = "development"
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
+    discovery_stale_scan_threshold_seconds: int | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

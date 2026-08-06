@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Protocol
 
 from sqlalchemy.orm import Session
@@ -129,11 +129,13 @@ class DiscoveryOrchestrator:
         privacy_service: DiscoveryPrivacyService | None = None,
         text_provider: DocumentTextProvider | None = None,
         audit_logger: AuditLogger | None = None,
+        stale_scan_threshold_seconds: int | None = None,
     ) -> None:
         self.discovery_engine = discovery_engine or DiscoveryEngine()
         self.privacy_service = privacy_service or DiscoveryPrivacyService()
         self.text_provider = text_provider or EncryptedDocumentTextProvider()
         self.audit_logger = audit_logger
+        self.stale_scan_threshold_seconds = stale_scan_threshold_seconds
 
     def create_scan(self, db: Session, *, user_id: str) -> DiscoveryScan:
         scan = DiscoveryScan(
@@ -189,29 +191,36 @@ class DiscoveryOrchestrator:
         document_ids: list[str],
     ) -> DiscoveryScan:
         started_at = datetime.now(timezone.utc)
-        claimed_rows = (
-            db.query(DiscoveryScan)
-            .filter(
-                DiscoveryScan.id == scan_id,
-                DiscoveryScan.user_id == user_id,
-                DiscoveryScan.status == DISCOVERY_SCAN_STATUS_PENDING,
+        existing_scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).first()
+        if existing_scan is None or existing_scan.user_id != user_id:
+            raise DiscoveryOrchestrationError("Discovery scan not found")
+
+        if existing_scan.status == DISCOVERY_SCAN_STATUS_PENDING:
+            claimed_rows = (
+                db.query(DiscoveryScan)
+                .filter(
+                    DiscoveryScan.id == scan_id,
+                    DiscoveryScan.user_id == user_id,
+                    DiscoveryScan.status == DISCOVERY_SCAN_STATUS_PENDING,
+                )
+                .update(
+                    {
+                        DiscoveryScan.status: DISCOVERY_SCAN_STATUS_RUNNING,
+                        DiscoveryScan.started_at: started_at,
+                    },
+                    synchronize_session=False,
+                )
             )
-            .update(
-                {
-                    DiscoveryScan.status: DISCOVERY_SCAN_STATUS_RUNNING,
-                    DiscoveryScan.started_at: started_at,
-                },
-                synchronize_session=False,
-            )
-        )
-        if claimed_rows != 1:
-            db.rollback()
-            existing_scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).first()
-            if existing_scan is None or existing_scan.user_id != user_id:
-                raise DiscoveryOrchestrationError("Discovery scan not found")
+            if claimed_rows != 1:
+                db.rollback()
+                raise DiscoveryScanAlreadyClaimedError("Discovery scan is not pending")
+            db.commit()
+            scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id, DiscoveryScan.user_id == user_id).one()
+        elif self._is_stale_running_scan(existing_scan):
+            self._reset_stale_running_scan(db, scan=existing_scan, user_id=user_id, started_at=started_at)
+            scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id, DiscoveryScan.user_id == user_id).one()
+        else:
             raise DiscoveryScanAlreadyClaimedError("Discovery scan is not pending")
-        db.commit()
-        scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id, DiscoveryScan.user_id == user_id).one()
 
         try:
             documents = self._get_owned_documents(db, user_id=user_id, document_ids=document_ids)
@@ -404,6 +413,65 @@ class DiscoveryOrchestrator:
             except Exception:
                 db.rollback()
             raise DiscoveryOrchestrationError("Discovery scan failed") from exc
+
+    def _is_stale_running_scan(self, scan: DiscoveryScan) -> bool:
+        if scan.status != DISCOVERY_SCAN_STATUS_RUNNING:
+            return False
+        if self.stale_scan_threshold_seconds is None:
+            return False
+        if scan.started_at is None:
+            return False
+        threshold = timedelta(seconds=self.stale_scan_threshold_seconds)
+        now = datetime.now(timezone.utc)
+        if scan.started_at.tzinfo is None:
+            scan_started_at = scan.started_at.replace(tzinfo=timezone.utc)
+        else:
+            scan_started_at = scan.started_at
+        return now - scan_started_at >= threshold
+
+    def _reset_stale_running_scan(self, db: Session, *, scan: DiscoveryScan, user_id: str, started_at: datetime) -> None:
+        scan.status = DISCOVERY_SCAN_STATUS_PENDING
+        scan.started_at = None
+        scan.completed_at = None
+        scan.documents_processed = 0
+        db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan.id).delete(synchronize_session=False)
+        db.query(EvidenceFinding).filter(EvidenceFinding.scan_id == scan.id).delete(synchronize_session=False)
+        db.commit()
+        self._audit(
+            db,
+            user_id,
+            DISCOVERY_STARTED,
+            "Discovery scan recovered from stale running state",
+            metadata={
+                "resource_type": "discovery_scan",
+                "resource_id": scan.id,
+                "scan_id": scan.id,
+                "event_type": DISCOVERY_STARTED,
+                "old_status": DISCOVERY_SCAN_STATUS_RUNNING,
+                "new_status": DISCOVERY_SCAN_STATUS_PENDING,
+            },
+        )
+        db.commit()
+
+        claimed_rows = (
+            db.query(DiscoveryScan)
+            .filter(
+                DiscoveryScan.id == scan.id,
+                DiscoveryScan.user_id == user_id,
+                DiscoveryScan.status == DISCOVERY_SCAN_STATUS_PENDING,
+            )
+            .update(
+                {
+                    DiscoveryScan.status: DISCOVERY_SCAN_STATUS_RUNNING,
+                    DiscoveryScan.started_at: started_at,
+                },
+                synchronize_session=False,
+            )
+        )
+        if claimed_rows != 1:
+            db.rollback()
+            raise DiscoveryScanAlreadyClaimedError("Discovery scan is not pending")
+        db.commit()
 
     def mark_scan_failed(self, db: Session, *, scan_id: str, user_id: str) -> DiscoveryScan | None:
         """Persist failure using a usable caller-owned session.
