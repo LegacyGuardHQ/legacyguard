@@ -16,6 +16,8 @@ export type DiscoveryProcessingOutcome =
   | 'RECOVERED'
   | 'RECOVERED_AND_COMPLETED';
 
+export type DiscoveryBackgroundJobState = 'QUEUED' | 'RUNNING' | 'RETRYING' | 'FAILED' | 'COMPLETED';
+
 export type DiscoveryReviewStatus = 'PENDING_REVIEW' | 'CONFIRMED' | 'DISMISSED';
 
 export const DISCOVERY_FINDING_CATEGORIES = [
@@ -77,6 +79,11 @@ export type DiscoveryScanStatusResponse = {
   recovered_at: string | null;
   processing_outcome: DiscoveryProcessingOutcome;
   processing_outcome_message: string;
+  background_job_state: DiscoveryBackgroundJobState;
+  background_job_message: string;
+  retry_count: number;
+  failure_count: number;
+  last_failure_at: string | null;
 };
 
 export type DiscoveryReportSummaryResponse = {

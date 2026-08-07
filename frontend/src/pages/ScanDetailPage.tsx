@@ -43,7 +43,17 @@ function formatDocumentWarning(warningCode: string | null) {
   return 'Processing notice';
 }
 
-function formatLifecycleMessage(status: string, lifecycleState: string, recoveredFromStale: boolean, processingOutcomeMessage?: string | null) {
+function formatLifecycleMessage(
+  status: string,
+  lifecycleState: string,
+  recoveredFromStale: boolean,
+  processingOutcomeMessage?: string | null,
+  backgroundJobMessage?: string | null,
+) {
+  if (backgroundJobMessage) {
+    return backgroundJobMessage;
+  }
+
   if (processingOutcomeMessage) {
     return processingOutcomeMessage;
   }
@@ -61,6 +71,16 @@ function formatLifecycleMessage(status: string, lifecycleState: string, recovere
   if (lifecycleState === 'COMPLETED_WITH_WARNINGS') return 'Completed with warnings';
   if (lifecycleState === 'FAILED') return 'Failed';
   return 'Processing status available';
+}
+
+function formatActiveBannerMessage(backgroundJobState: string) {
+  if (backgroundJobState === 'RETRYING') {
+    return 'Discovery processing is retrying in the background. Updating details automatically...';
+  }
+  if (backgroundJobState === 'QUEUED') {
+    return 'Discovery processing is queued in the background. Updating details automatically...';
+  }
+  return 'Discovery processing is active. Updating details automatically...';
 }
 
 export default function ScanDetailPage() {
@@ -106,7 +126,9 @@ export default function ScanDetailPage() {
     scan.lifecycle_state,
     scan.recovered_from_stale,
     scan.processing_outcome_message,
+    scan.background_job_message,
   );
+  const activeBannerMessage = formatActiveBannerMessage(scan.background_job_state);
 
   return (
     <div className="scan-detail">
@@ -133,7 +155,7 @@ export default function ScanDetailPage() {
         {isScanActive ? (
           <div className="active-scan-banner" role="status" aria-live="polite">
             <span className="spinner-dot" aria-hidden="true">●</span>
-            <span>Discovery processing is active. Updating details automatically…</span>
+            <span>{activeBannerMessage}</span>
           </div>
         ) : null}
 
@@ -141,6 +163,24 @@ export default function ScanDetailPage() {
           <p>
             <strong>Lifecycle:</strong> {lifecycleMessage}
           </p>
+          <p>
+            <strong>Background job:</strong> {scan.background_job_state}
+          </p>
+          {scan.retry_count > 0 ? (
+            <p>
+              <strong>Retries:</strong> {scan.retry_count}
+            </p>
+          ) : null}
+          {scan.failure_count > 0 ? (
+            <p>
+              <strong>Failures:</strong> {scan.failure_count}
+            </p>
+          ) : null}
+          {scan.last_failure_at ? (
+            <p>
+              <strong>Last failure:</strong> {formatTimestamp(scan.last_failure_at)}
+            </p>
+          ) : null}
         </div>
 
         {scan.recovered_from_stale ? (

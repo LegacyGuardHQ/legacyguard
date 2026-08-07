@@ -89,6 +89,46 @@ def _get_scan_recovery_metadata(db: Session, *, scan: DiscoveryScan, user_id: st
     return False, None
 
 
+def _get_scan_retry_count(db: Session, *, scan: DiscoveryScan, user_id: str) -> int:
+    recovery_audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.user_id == user_id,
+            AuditLog.event_type == "discovery_started",
+            AuditLog.details == "Discovery scan recovered from stale running state",
+        )
+        .all()
+    )
+    retry_count = 0
+    for audit_entry in recovery_audit:
+        metadata = audit_entry.event_metadata or {}
+        if metadata.get("scan_id") == scan.id:
+            retry_count += 1
+    return retry_count
+
+
+def _get_scan_failure_metadata(db: Session, *, scan: DiscoveryScan, user_id: str) -> tuple[int, datetime | None]:
+    failure_audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.user_id == user_id,
+            AuditLog.event_type == "discovery_failed",
+            AuditLog.details == "Discovery scan failed",
+        )
+        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+        .all()
+    )
+    failure_count = 0
+    last_failure_at: datetime | None = None
+    for audit_entry in failure_audit:
+        metadata = audit_entry.event_metadata or {}
+        if metadata.get("scan_id") == scan.id:
+            failure_count += 1
+            if last_failure_at is None:
+                last_failure_at = audit_entry.timestamp
+    return failure_count, last_failure_at
+
+
 def _derive_processing_outcome(status: str, *, recovered_from_stale: bool) -> tuple[str, str]:
     if recovered_from_stale and status in {DISCOVERY_SCAN_STATUS_COMPLETE, DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS}:
         return "RECOVERED_AND_COMPLETED", "Recovered and completed"
@@ -107,11 +147,37 @@ def _derive_processing_outcome(status: str, *, recovered_from_stale: bool) -> tu
     return "IN_PROGRESS", "Processing is active"
 
 
+def _derive_background_job_state(
+    status: str,
+    *,
+    retry_count: int,
+    failure_count: int,
+) -> tuple[str, str]:
+    if status == DISCOVERY_SCAN_STATUS_FAILED:
+        return "FAILED", "Background processing failed"
+    if status in {DISCOVERY_SCAN_STATUS_COMPLETE, DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS}:
+        return "COMPLETED", "Background processing completed"
+    if retry_count > 0:
+        return "RETRYING", "Retrying background processing"
+    if status == DISCOVERY_SCAN_STATUS_RUNNING:
+        return "RUNNING", "Background processing is active"
+    if failure_count > 0:
+        return "RETRYING", "Retrying background processing"
+    return "QUEUED", "Queued for background processing"
+
+
 def _scan_status_response(db: Session, scan: DiscoveryScan, user_id: str) -> DiscoveryScanStatusResponse:
     recovered_from_stale, recovered_at = _get_scan_recovery_metadata(db, scan=scan, user_id=user_id)
+    retry_count = _get_scan_retry_count(db, scan=scan, user_id=user_id)
+    failure_count, last_failure_at = _get_scan_failure_metadata(db, scan=scan, user_id=user_id)
     processing_outcome, processing_outcome_message = _derive_processing_outcome(
         scan.status,
         recovered_from_stale=recovered_from_stale,
+    )
+    background_job_state, background_job_message = _derive_background_job_state(
+        scan.status,
+        retry_count=retry_count,
+        failure_count=failure_count,
     )
     return DiscoveryScanStatusResponse(
         scan_id=scan.id,
@@ -124,6 +190,11 @@ def _scan_status_response(db: Session, scan: DiscoveryScan, user_id: str) -> Dis
         recovered_at=recovered_at,
         processing_outcome=processing_outcome,
         processing_outcome_message=processing_outcome_message,
+        background_job_state=background_job_state,
+        background_job_message=background_job_message,
+        retry_count=retry_count,
+        failure_count=failure_count,
+        last_failure_at=last_failure_at,
     )
 
 

@@ -150,10 +150,20 @@ def test_scan_status_response_schema_is_correct() -> None:
         "recovered_at",
         "processing_outcome",
         "processing_outcome_message",
+        "background_job_state",
+        "background_job_message",
+        "retry_count",
+        "failure_count",
+        "last_failure_at",
     }
     assert payload["lifecycle_state"] == "RUNNING"
     assert payload["processing_outcome"] == "IN_PROGRESS"
     assert payload["processing_outcome_message"] == "Processing is active"
+    assert payload["background_job_state"] == "RUNNING"
+    assert payload["background_job_message"] == "Background processing is active"
+    assert payload["retry_count"] == 0
+    assert payload["failure_count"] == 0
+    assert payload["last_failure_at"] is None
     assert payload["recovered_from_stale"] is False
     assert payload["recovered_at"] is None
     assert "matched_terms" not in payload
@@ -200,6 +210,63 @@ def test_scan_status_response_surfaces_recovery_metadata_from_controlled_audit_e
     assert payload["status"] == "COMPLETE"
     assert payload["processing_outcome"] == "RECOVERED_AND_COMPLETED"
     assert payload["processing_outcome_message"] == "Recovered and completed"
+    assert payload["background_job_state"] == "COMPLETED"
+    assert payload["background_job_message"] == "Background processing completed"
+    assert payload["retry_count"] == 1
+    assert payload["failure_count"] == 0
+    assert payload["last_failure_at"] is None
+
+
+def test_scan_status_response_surfaces_failure_counts_for_background_monitoring() -> None:
+    token = _token("status-failure@example.com")
+    user_id = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+    db = SessionLocal()
+    try:
+        scan = DiscoveryScan(
+            id="scan-failure-monitoring",
+            user_id=user_id,
+            status="FAILED",
+            documents_processed=0,
+            created_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+        )
+        db.add(scan)
+        db.commit()
+        log_event(
+            db,
+            user_id=user_id,
+            event_type="discovery_failed",
+            details="Discovery scan failed",
+            metadata={
+                "scan_id": scan.id,
+                "old_status": "RUNNING",
+                "new_status": "FAILED",
+            },
+        )
+        log_event(
+            db,
+            user_id=user_id,
+            event_type="discovery_failed",
+            details="Discovery scan failed",
+            metadata={
+                "scan_id": scan.id,
+                "old_status": "RUNNING",
+                "new_status": "FAILED",
+            },
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/discovery/scans/scan-failure-monitoring", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "FAILED"
+    assert payload["background_job_state"] == "FAILED"
+    assert payload["background_job_message"] == "Background processing failed"
+    assert payload["retry_count"] == 0
+    assert payload["failure_count"] == 2
+    assert payload["last_failure_at"] is not None
 
 
 def test_safe_report_endpoint_returns_only_summary_fields() -> None:

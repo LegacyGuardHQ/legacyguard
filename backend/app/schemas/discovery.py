@@ -58,6 +58,14 @@ DiscoveryProcessingOutcome = Literal[
     "RECOVERED_AND_COMPLETED",
 ]
 
+DiscoveryBackgroundJobState = Literal[
+    "QUEUED",
+    "RUNNING",
+    "RETRYING",
+    "FAILED",
+    "COMPLETED",
+]
+
 # Keep the public contract synchronized with the model's controlled values.
 assert set(DiscoveryDocumentStatus.__args__) == {
     DISCOVERY_DOCUMENT_STATUS_PENDING,
@@ -104,6 +112,17 @@ class DiscoveryScanStatusResponse(DiscoveryScanResponse):
         description="Controlled processing outcome for the current scan state.",
     )
     processing_outcome_message: str = Field(default="Processing is active", description="Privacy-safe user-facing processing outcome message.")
+    background_job_state: DiscoveryBackgroundJobState = Field(
+        default="QUEUED",
+        description="Controlled background job state for queued, active, retrying, failed, and completed scan processing.",
+    )
+    background_job_message: str = Field(
+        default="Queued for background processing",
+        description="Privacy-safe background processing message for queue, retry, and failure visibility.",
+    )
+    retry_count: int = Field(default=0, ge=0, description="Number of stale-run recovery retries recorded for this scan.")
+    failure_count: int = Field(default=0, ge=0, description="Number of recorded background processing failures for this scan.")
+    last_failure_at: datetime | None = None
 
 
 class DiscoveryScanSummaryResponse(BaseModel):
