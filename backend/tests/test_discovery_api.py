@@ -148,8 +148,12 @@ def test_scan_status_response_schema_is_correct() -> None:
         "lifecycle_state",
         "recovered_from_stale",
         "recovered_at",
+        "processing_outcome",
+        "processing_outcome_message",
     }
     assert payload["lifecycle_state"] == "RUNNING"
+    assert payload["processing_outcome"] == "IN_PROGRESS"
+    assert payload["processing_outcome_message"] == "Processing is active"
     assert payload["recovered_from_stale"] is False
     assert payload["recovered_at"] is None
     assert "matched_terms" not in payload
@@ -194,6 +198,8 @@ def test_scan_status_response_surfaces_recovery_metadata_from_controlled_audit_e
     assert payload["recovered_from_stale"] is True
     assert payload["recovered_at"] is not None
     assert payload["status"] == "COMPLETE"
+    assert payload["processing_outcome"] == "RECOVERED_AND_COMPLETED"
+    assert payload["processing_outcome_message"] == "Recovered and completed"
 
 
 def test_safe_report_endpoint_returns_only_summary_fields() -> None:

@@ -89,8 +89,30 @@ def _get_scan_recovery_metadata(db: Session, *, scan: DiscoveryScan, user_id: st
     return False, None
 
 
+def _derive_processing_outcome(status: str, *, recovered_from_stale: bool) -> tuple[str, str]:
+    if recovered_from_stale and status in {DISCOVERY_SCAN_STATUS_COMPLETE, DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS}:
+        return "RECOVERED_AND_COMPLETED", "Recovered and completed"
+    if recovered_from_stale:
+        return "RECOVERED", "Recovered from a stale running state"
+    if status == DISCOVERY_SCAN_STATUS_PENDING:
+        return "QUEUED", "Queued for processing"
+    if status == DISCOVERY_SCAN_STATUS_RUNNING:
+        return "IN_PROGRESS", "Processing is active"
+    if status == DISCOVERY_SCAN_STATUS_COMPLETE:
+        return "COMPLETED", "Completed successfully"
+    if status == DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS:
+        return "COMPLETED_WITH_WARNINGS", "Completed with warnings"
+    if status == DISCOVERY_SCAN_STATUS_FAILED:
+        return "FAILED", "Failed"
+    return "IN_PROGRESS", "Processing is active"
+
+
 def _scan_status_response(db: Session, scan: DiscoveryScan, user_id: str) -> DiscoveryScanStatusResponse:
     recovered_from_stale, recovered_at = _get_scan_recovery_metadata(db, scan=scan, user_id=user_id)
+    processing_outcome, processing_outcome_message = _derive_processing_outcome(
+        scan.status,
+        recovered_from_stale=recovered_from_stale,
+    )
     return DiscoveryScanStatusResponse(
         scan_id=scan.id,
         status=scan.status,
@@ -100,6 +122,8 @@ def _scan_status_response(db: Session, scan: DiscoveryScan, user_id: str) -> Dis
         lifecycle_state=_derive_lifecycle_state(scan.status),
         recovered_from_stale=recovered_from_stale,
         recovered_at=recovered_at,
+        processing_outcome=processing_outcome,
+        processing_outcome_message=processing_outcome_message,
     )
 
 

@@ -43,7 +43,11 @@ function formatDocumentWarning(warningCode: string | null) {
   return 'Processing notice';
 }
 
-function formatLifecycleMessage(status: string, lifecycleState: string, recoveredFromStale: boolean) {
+function formatLifecycleMessage(status: string, lifecycleState: string, recoveredFromStale: boolean, processingOutcomeMessage?: string | null) {
+  if (processingOutcomeMessage) {
+    return processingOutcomeMessage;
+  }
+
   if (recoveredFromStale) {
     if (status === 'COMPLETE' || status === 'COMPLETED_WITH_WARNINGS') {
       return 'Completed successfully';
@@ -97,7 +101,12 @@ export default function ScanDetailPage() {
   }
 
   const isScanActive = scan.status === 'PENDING' || scan.status === 'RUNNING';
-  const lifecycleMessage = formatLifecycleMessage(scan.status, scan.lifecycle_state, scan.recovered_from_stale);
+  const lifecycleMessage = formatLifecycleMessage(
+    scan.status,
+    scan.lifecycle_state,
+    scan.recovered_from_stale,
+    scan.processing_outcome_message,
+  );
 
   return (
     <div className="scan-detail">
@@ -137,7 +146,10 @@ export default function ScanDetailPage() {
         {scan.recovered_from_stale ? (
           <div className="trust-note" aria-live="polite">
             <p>
-              <strong>Recovery notice:</strong> Recovered from a stale running state.
+              <strong>Recovery notice:</strong>{' '}
+              {scan.status === 'COMPLETE' || scan.status === 'COMPLETED_WITH_WARNINGS'
+                ? 'Recovered and completed'
+                : 'Recovered from a stale running state'}
             </p>
             {scan.recovered_at ? (
               <p>

@@ -2,15 +2,13 @@
 
 ## Repository
 
-Remote: https://github.com/jh505tt-create/legacyguard.git
-
-Current master: `d815bdc318e6cc0ccc4154626ef1df9e44ba1fce`
-
-Development uses one feature branch and one pull request per milestone. Branches are created from an updated, clean `master` branch.
+- Remote: https://github.com/jh505tt-create/legacyguard.git
+- Current master: `04c4b44f08f7f6a2741f6f48733b7f4dd5af2995`
+- Development continues from a clean master branch with one milestone per feature branch and pull request.
 
 ## Purpose
 
-LegacyGuard is a privacy-first financial asset discovery platform designed to help users locate unknown retirement accounts, insurance policies, financial assets, benefits, and estate-related records while maintaining strict privacy, owner isolation, transparency, and human verification.
+LegacyGuard is a privacy-first financial asset discovery platform designed to help owners locate retirement accounts, insurance policies, benefits, and estate-related records while preserving privacy, owner isolation, human review, and transparent reporting.
 
 ## Engineering Principles
 
@@ -42,8 +40,9 @@ LegacyGuard is a privacy-first financial asset discovery platform designed to he
 - GitHub Actions CI
 - Phase 5.1 — Dependency Baseline and CI Health
 - Phase 5.2 — Discovery Reliability Hardening
+- Phase 5.3 — Discovery Lifecycle Telemetry and Safe Status Visibility
 
-Manual asset conversion is explicitly user-initiated. Converted assets remain `NEEDS_REVIEW`; LegacyGuard does not automatically verify them.
+Manual asset conversion remains explicitly user-initiated. Converted assets stay `NEEDS_REVIEW`; LegacyGuard does not automatically verify them.
 
 ## Current APIs
 
@@ -61,30 +60,12 @@ Manual asset conversion is explicitly user-initiated. Converted assets remain `N
 
 ## Current Roadmap
 
-Completed: Phase 4A, Phase 4B.1 through Phase 4B.8, Phase 5.1, and Phase 5.2.
+Completed: Phase 5.3.
 
-Next milestone: Phase 5.3 — Discovery Lifecycle Telemetry and Safe Status Visibility.
-
-## Development Workflow
-
-1. Update `master`.
-2. Create the milestone feature branch.
-3. Implement one milestone.
-4. Run focused tests.
-5. Run the frontend build.
-6. Run `git diff --check`.
-7. Perform a read-only review.
-8. Fix review findings.
-9. Commit.
-10. Push.
-11. Open a pull request.
-12. Complete final review.
-13. Merge.
+Next milestone: Phase 5.4 — Background Job Monitoring & Failure Surfacing.
 
 ## Validation
 
-Backend: `pytest`
-
-Frontend: `npm test` and `npm run build`
-
-Repository: `git diff --check`
+- Backend: `pytest`
+- Frontend: `npm test` and `npm run build`
+- Repository: `git diff --check`

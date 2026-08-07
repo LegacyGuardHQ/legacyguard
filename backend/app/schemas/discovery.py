@@ -48,6 +48,16 @@ DiscoveryLifecycleState = Literal[
     "FAILED",
 ]
 
+DiscoveryProcessingOutcome = Literal[
+    "QUEUED",
+    "IN_PROGRESS",
+    "COMPLETED",
+    "COMPLETED_WITH_WARNINGS",
+    "FAILED",
+    "RECOVERED",
+    "RECOVERED_AND_COMPLETED",
+]
+
 # Keep the public contract synchronized with the model's controlled values.
 assert set(DiscoveryDocumentStatus.__args__) == {
     DISCOVERY_DOCUMENT_STATUS_PENDING,
@@ -89,6 +99,11 @@ class DiscoveryScanStatusResponse(DiscoveryScanResponse):
     lifecycle_state: DiscoveryLifecycleState
     recovered_from_stale: bool = Field(default=False, description="Whether the scan was recovered from a stale running state.")
     recovered_at: datetime | None = None
+    processing_outcome: DiscoveryProcessingOutcome = Field(
+        default="IN_PROGRESS",
+        description="Controlled processing outcome for the current scan state.",
+    )
+    processing_outcome_message: str = Field(default="Processing is active", description="Privacy-safe user-facing processing outcome message.")
 
 
 class DiscoveryScanSummaryResponse(BaseModel):

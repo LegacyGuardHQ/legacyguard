@@ -48,6 +48,8 @@ const sampleScan: DiscoveryScanStatusResponse = {
   lifecycle_state: 'COMPLETED',
   recovered_from_stale: false,
   recovered_at: null,
+  processing_outcome: 'COMPLETED',
+  processing_outcome_message: 'Completed successfully',
 };
 
 const sampleRunningScan: DiscoveryScanStatusResponse = {
@@ -59,6 +61,8 @@ const sampleRunningScan: DiscoveryScanStatusResponse = {
   lifecycle_state: 'RUNNING',
   recovered_from_stale: false,
   recovered_at: null,
+  processing_outcome: 'IN_PROGRESS',
+  processing_outcome_message: 'Processing is active',
 };
 
 const sampleRecoveredScan: DiscoveryScanStatusResponse = {
@@ -260,7 +264,7 @@ describe('ScanDetailPage', () => {
     renderScanDetailPage();
 
     expect(await screen.findByText('Completed successfully')).toBeInTheDocument();
-    expect(screen.getByText(/Recovered from a stale running state/i)).toBeInTheDocument();
+    expect(screen.getByText('Recovered and completed')).toBeInTheDocument();
     expect(screen.getByText(/Recovered at/i)).toBeInTheDocument();
     expect(screen.queryByText(/Traceback|Exception|internal error/i)).not.toBeInTheDocument();
   });
