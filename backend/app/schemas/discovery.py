@@ -22,6 +22,7 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_STATUS_PENDING,
     DISCOVERY_DOCUMENT_STATUS_PROCESSING,
     DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_EMPTY_DOCUMENT,
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
 )
@@ -49,7 +50,9 @@ DiscoveryDocumentStatus = Literal[
 DiscoveryDocumentWarning = Literal[
     "PROCESSING_FAILED",
     "UNSUPPORTED_EXTRACTION",
+    "EMPTY_DOCUMENT",
 ]
+# Empty-document warnings are surfaced when extraction completes but the content is blank.
 
 DiscoveryFindingCategory = Literal[
     "RETIREMENT_INDICATOR",
@@ -114,6 +117,7 @@ assert set(DiscoveryDocumentStatus.__args__) == {
 assert set(DiscoveryDocumentWarning.__args__) == {
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
+    DISCOVERY_DOCUMENT_WARNING_EMPTY_DOCUMENT,
 }
 assert set(DiscoveryFindingCategory.__args__) == {
     RETIREMENT_INDICATOR,

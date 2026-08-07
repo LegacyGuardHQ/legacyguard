@@ -96,7 +96,7 @@ export default function ReviewQueuePage() {
         <span className="eyebrow">Discovery</span>
         <h1 className="page-title">Review queue</h1>
         <p className="page-description">
-          Review automated rule-engine discovery findings. Inspect signal strength and update status to confirm or dismiss findings.
+          Review automated rule-engine discovery findings. Inspect signal strength and update the review status for each finding.
         </p>
       </header>
 
@@ -121,21 +121,42 @@ export default function ReviewQueuePage() {
         </div>
         <div className="category-filter">
           <label htmlFor="review-category-filter">Category</label>
-          <select
-            id="review-category-filter"
-            value={category ?? ''}
-            onChange={handleCategoryChange}
-            disabled={scansQuery.isFetching || updateMutation.isPending}
-          >
-            <option value="">All categories</option>
-            {DISCOVERY_FINDING_CATEGORIES.map((value) => (
-              <option key={value} value={value}>
-                {formatCategory(value)}
-              </option>
-            ))}
-          </select>
+          <div className="category-filter-controls">
+            <select
+              id="review-category-filter"
+              value={category ?? ''}
+              onChange={handleCategoryChange}
+              disabled={scansQuery.isFetching || updateMutation.isPending}
+            >
+              <option value="">All categories</option>
+              {DISCOVERY_FINDING_CATEGORIES.map((value) => (
+                <option key={value} value={value}>
+                  {formatCategory(value)}
+                </option>
+              ))}
+            </select>
+            {category !== null && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-inline"
+                onClick={() => {
+                  updateMutation.reset();
+                  setCategory(null);
+                  setPage(1);
+                }}
+              >
+                Clear category filter
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      <p className="review-queue-summary" aria-live="polite">
+        {selectedCategoryLabel
+          ? `Showing ${activeTabConfig.label.toLowerCase()} findings filtered by ${selectedCategoryLabel} (${totalCount} total)`
+          : `Showing ${activeTabConfig.label.toLowerCase()} findings (${totalCount} total)`}
+      </p>
 
       <section
         id={REVIEW_PANEL_ID}
@@ -177,9 +198,9 @@ export default function ReviewQueuePage() {
                   <p>No {activeTabConfig.label.toLowerCase()} findings match {selectedCategoryLabel}.</p>
                 ) : (
                   <p>
-                    {activeTab === 'PENDING_REVIEW' && 'There are no findings currently awaiting review.'}
-                    {activeTab === 'CONFIRMED' && 'No findings have been confirmed yet.'}
-                    {activeTab === 'DISMISSED' && 'No findings have been dismissed.'}
+                    {activeTab === 'PENDING_REVIEW' && 'There are no findings waiting for review in this queue.'}
+                    {activeTab === 'CONFIRMED' && 'No findings have been confirmed in this review queue yet.'}
+                    {activeTab === 'DISMISSED' && 'No findings have been dismissed in this review queue yet.'}
                   </p>
                 )}
               </div>
@@ -211,7 +232,7 @@ export default function ReviewQueuePage() {
 
                     <div className="queue-action-toolbar">
                       <span className="current-status-label">
-                        Status: <strong>{activeTabConfig.label}</strong>
+                        Current review status: <strong>{activeTabConfig.label}</strong>
                       </span>
 
                       <div className="action-buttons">

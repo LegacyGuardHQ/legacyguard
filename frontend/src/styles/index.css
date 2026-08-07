@@ -588,6 +588,13 @@ input:focus { border-color: #63cadd; box-shadow: 0 0 0 3px rgba(99, 202, 221, 0.
   border: 1px solid rgba(114, 217, 234, 0.3);
 }
 
+.review-queue-summary {
+  margin: -0.25rem 0 1rem;
+  color: #9fb2c9;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
 .tab-button:focus-visible, .review-tab-panel:focus-visible {
   outline: 3px solid rgba(114, 217, 234, 0.55);
   outline-offset: 3px;
