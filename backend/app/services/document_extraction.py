@@ -25,6 +25,13 @@ class NormalizedDocumentText:
     warnings: list[str]
 
 
+class ExtractedDocumentText(str):
+    def __new__(cls, value: str, *, warnings: list[str] | None = None) -> "ExtractedDocumentText":
+        instance = super().__new__(cls, value)
+        instance.warnings = list(warnings or [])
+        return instance
+
+
 class DocumentExtractionService:
     def extract_from_text(self, document_text: str | None) -> NormalizedDocumentText:
         normalized = self._normalize_text(document_text or "")

@@ -1,10 +1,10 @@
 # LegacyGuard Development Roadmap
 
-## Current state (2026-08-06)
-- Repository is stable on master at `04c4b44f08f7f6a2741f6f48733b7f4dd5af2995`.
-- Phase 5.4 is complete and ready for PR.
-- Phase 5.5 API contract hardening is in progress.
-- The current slice focuses on controlled validation and response contracts for consistency and deterministic behavior.
+## Current state (2026-08-07)
+- Repository is stable on master at `8cfff7a`.
+- Phase 5.4 and Phase 5.5 are complete and merged.
+- Phase 5.6 extraction reliability is in progress.
+- The current slice focuses on handling unsupported or empty document content without undermining scan completion semantics.
 
 ## Completed milestones
 - Phase 5.1 — Dependency Baseline and CI Health
@@ -16,9 +16,8 @@
   - Expanded backend and frontend regression coverage for background status monitoring
 
 ## Upcoming milestones
-- Phase 5.5 — API Contract Hardening
-  - Standardize validation, pagination, and error behavior
-  - Keep responses privacy-safe and deterministic
 - Phase 5.6 — Extraction Reliability
   - Improve handling for unsupported or low-quality document formats
   - Preserve clear warning semantics for skipped or failed documents
+- Phase 5.7 — Review Queue UX Refinement
+  - Improve the finding-review experience and status clarity
