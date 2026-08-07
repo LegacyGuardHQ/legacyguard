@@ -13,7 +13,7 @@ from app.database.connection import SessionLocal
 from app.main import app
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.asset_beneficiary import AssetBeneficiary
-from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, BENEFICIARY_STATUS_DECEASED, Beneficiary
+from app.models.beneficiary import BENEFICIARY_STATUS_ACTIVE, BENEFICIARY_STATUS_ARCHIVED, BENEFICIARY_STATUS_DECEASED, BENEFICIARY_VERIFICATION_UNKNOWN, Beneficiary
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -101,6 +101,8 @@ def test_owner_links_own_beneficiary_to_own_asset() -> None:
     payload = response.json()
     assert payload["asset_id"] == asset["id"]
     assert payload["beneficiary"]["id"] == beneficiary["id"]
+    assert payload["beneficiary"]["status"] == BENEFICIARY_STATUS_ACTIVE
+    assert payload["beneficiary"]["verification_status"] == BENEFICIARY_VERIFICATION_UNKNOWN
     assert payload["beneficiary_role"] == "PRIMARY"
     assert payload["percentage"] == "50.00"
     assert payload["transfer_method"] == "WILL"
