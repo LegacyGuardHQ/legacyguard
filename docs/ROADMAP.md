@@ -3,7 +3,8 @@
 ## Current state (2026-08-06)
 - Repository is stable on master at `04c4b44f08f7f6a2741f6f48733b7f4dd5af2995`.
 - Phase 5.4 is complete and ready for PR.
-- The next milestone focuses on API contract hardening for consistency and deterministic behavior.
+- Phase 5.5 API contract hardening is in progress.
+- The current slice focuses on controlled validation and response contracts for consistency and deterministic behavior.
 
 ## Completed milestones
 - Phase 5.1 — Dependency Baseline and CI Health

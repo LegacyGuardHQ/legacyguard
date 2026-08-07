@@ -65,7 +65,9 @@ Manual asset conversion remains explicitly user-initiated. Converted assets stay
 
 Completed: Phase 5.4.
 
-Next milestone: Phase 5.5 — API Contract Hardening.
+Current milestone: Phase 5.5 — API Contract Hardening.
+
+Phase 5.5 work in progress: controlled Literal contracts have been hardened across discovery, documents, assets, beneficiaries, asset-beneficiary links, and legacy compatibility schemas.
 
 ## Validation
 
