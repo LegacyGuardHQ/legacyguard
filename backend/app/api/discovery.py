@@ -36,6 +36,8 @@ from app.schemas.discovery import (
     EvidenceFindingResponse,
     EvidenceFindingDetailResponse,
     EvidenceFindingReviewRequest,
+    DiscoveryFindingCategory,
+    DiscoveryReviewStatus,
     ManualAssetConversionRequest,
     PaginatedDiscoveryScanResponse,
     PaginatedEvidenceFindingResponse,
@@ -435,7 +437,7 @@ def list_discovery_findings(
     scan_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    review_status: str | None = Query(None),
+    review_status: DiscoveryReviewStatus | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PaginatedEvidenceFindingResponse:
@@ -499,8 +501,8 @@ def list_discovery_scan_documents(
 def list_discovery_review_queue(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    review_status: str = Query(EVIDENCE_REVIEW_STATUS_PENDING_REVIEW),
-    category: str | None = Query(None),
+    review_status: DiscoveryReviewStatus = Query(EVIDENCE_REVIEW_STATUS_PENDING_REVIEW),
+    category: DiscoveryFindingCategory | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PaginatedEvidenceFindingResponse:

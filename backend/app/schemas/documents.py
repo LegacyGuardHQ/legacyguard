@@ -1,9 +1,18 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.document import DOCUMENT_TYPE_VALUES
 from app.services.document_validation import normalize_display_filename, validate_extension_and_mime
+
+DocumentUploadDiscoveryScanStatus = Literal[
+    "PENDING",
+    "RUNNING",
+    "COMPLETE",
+    "COMPLETED_WITH_WARNINGS",
+    "FAILED",
+]
 
 
 class DocumentCreate(BaseModel):
@@ -76,7 +85,7 @@ class DocumentResponse(DocumentListResponse):
 
 class DocumentUploadDiscoveryScanResponse(BaseModel):
     scan_id: str
-    status: str
+    status: DocumentUploadDiscoveryScanStatus
 
 
 class DocumentUploadResponse(BaseModel):
