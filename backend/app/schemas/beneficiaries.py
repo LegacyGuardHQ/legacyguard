@@ -1,14 +1,32 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.beneficiary import (
     BENEFICIARY_STATUS_ACTIVE,
+    BENEFICIARY_STATUS_ARCHIVED,
+    BENEFICIARY_STATUS_DECEASED,
     BENEFICIARY_VERIFICATION_NEEDS_REVIEW,
     BENEFICIARY_VERIFICATION_OUTDATED,
     BENEFICIARY_VERIFICATION_UNKNOWN,
     BENEFICIARY_VERIFICATION_VERIFIED,
 )
+
+BeneficiaryStatus = Literal["Active", "Archived", "Deceased"]
+BeneficiaryVerificationStatus = Literal["UNKNOWN", "VERIFIED", "NEEDS_REVIEW", "OUTDATED"]
+
+assert set(BeneficiaryStatus.__args__) == {
+    BENEFICIARY_STATUS_ACTIVE,
+    BENEFICIARY_STATUS_ARCHIVED,
+    BENEFICIARY_STATUS_DECEASED,
+}
+assert set(BeneficiaryVerificationStatus.__args__) == {
+    BENEFICIARY_VERIFICATION_UNKNOWN,
+    BENEFICIARY_VERIFICATION_VERIFIED,
+    BENEFICIARY_VERIFICATION_NEEDS_REVIEW,
+    BENEFICIARY_VERIFICATION_OUTDATED,
+}
 
 
 class BeneficiaryCreate(BaseModel):
@@ -16,7 +34,7 @@ class BeneficiaryCreate(BaseModel):
     relationship_type: str | None = None
     contact_information: str | None = None
     notes: str | None = None
-    verification_status: str = BENEFICIARY_VERIFICATION_UNKNOWN
+    verification_status: BeneficiaryVerificationStatus = BENEFICIARY_VERIFICATION_UNKNOWN
     review_due_at: datetime | None = None
     is_deceased: bool = False
 
@@ -29,7 +47,7 @@ class BeneficiaryCreate(BaseModel):
 
     @field_validator("verification_status")
     @classmethod
-    def validate_verification_status(cls, value: str) -> str:
+    def validate_verification_status(cls, value: BeneficiaryVerificationStatus) -> BeneficiaryVerificationStatus:
         allowed = {
             BENEFICIARY_VERIFICATION_UNKNOWN,
             BENEFICIARY_VERIFICATION_VERIFIED,
@@ -46,7 +64,7 @@ class BeneficiaryUpdate(BaseModel):
     relationship_type: str | None = None
     contact_information: str | None = None
     notes: str | None = None
-    verification_status: str | None = None
+    verification_status: BeneficiaryVerificationStatus | None = None
     review_due_at: datetime | None = None
     is_deceased: bool | None = None
 
@@ -61,7 +79,7 @@ class BeneficiaryUpdate(BaseModel):
 
     @field_validator("verification_status")
     @classmethod
-    def validate_verification_status(cls, value: str | None) -> str | None:
+    def validate_verification_status(cls, value: BeneficiaryVerificationStatus | None) -> BeneficiaryVerificationStatus | None:
         if value is None:
             return value
         allowed = {
@@ -81,8 +99,8 @@ class BeneficiaryListResponse(BaseModel):
     id: str
     name: str
     relationship_type: str | None = None
-    status: str
-    verification_status: str
+    status: BeneficiaryStatus
+    verification_status: BeneficiaryVerificationStatus
     verified_at: datetime | None = None
     review_due_at: datetime | None = None
     is_deceased: bool

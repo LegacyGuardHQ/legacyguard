@@ -1,9 +1,28 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.asset import ASSET_VERIFICATION_CLOSED, ASSET_VERIFICATION_NEEDS_REVIEW, ASSET_VERIFICATION_UNKNOWN, ASSET_VERIFICATION_VERIFIED
+from app.models.asset import (
+    ASSET_STATUS_ACTIVE,
+    ASSET_STATUS_ARCHIVED,
+    ASSET_VERIFICATION_CLOSED,
+    ASSET_VERIFICATION_NEEDS_REVIEW,
+    ASSET_VERIFICATION_UNKNOWN,
+    ASSET_VERIFICATION_VERIFIED,
+)
+
+AssetStatus = Literal["Active", "Archived"]
+AssetVerificationStatus = Literal["UNKNOWN", "VERIFIED", "NEEDS_REVIEW", "CLOSED"]
+
+assert set(AssetStatus.__args__) == {ASSET_STATUS_ACTIVE, ASSET_STATUS_ARCHIVED}
+assert set(AssetVerificationStatus.__args__) == {
+    ASSET_VERIFICATION_UNKNOWN,
+    ASSET_VERIFICATION_VERIFIED,
+    ASSET_VERIFICATION_NEEDS_REVIEW,
+    ASSET_VERIFICATION_CLOSED,
+}
 
 
 class AssetDetailCreate(BaseModel):
@@ -27,9 +46,9 @@ class AssetCreate(BaseModel):
     description: str | None = None
     estimated_value: Decimal | None = Field(default=None, ge=0)
     ownership_type: str | None = None
-    status: str | None = None
+    status: AssetStatus | None = None
     is_verified: bool = False
-    verification_status: str = ASSET_VERIFICATION_UNKNOWN
+    verification_status: AssetVerificationStatus = ASSET_VERIFICATION_UNKNOWN
     details: AssetDetailCreate | None = None
 
     @field_validator("asset_name", "asset_category")
@@ -41,7 +60,7 @@ class AssetCreate(BaseModel):
 
     @field_validator("verification_status")
     @classmethod
-    def validate_verification_status(cls, value: str) -> str:
+    def validate_verification_status(cls, value: AssetVerificationStatus) -> AssetVerificationStatus:
         allowed = {ASSET_VERIFICATION_UNKNOWN, ASSET_VERIFICATION_VERIFIED, ASSET_VERIFICATION_NEEDS_REVIEW, ASSET_VERIFICATION_CLOSED}
         if value not in allowed:
             raise ValueError("Unsupported asset verification status")
@@ -55,9 +74,9 @@ class AssetUpdate(BaseModel):
     description: str | None = None
     estimated_value: Decimal | None = Field(default=None, ge=0)
     ownership_type: str | None = None
-    status: str | None = None
+    status: AssetStatus | None = None
     is_verified: bool | None = None
-    verification_status: str | None = None
+    verification_status: AssetVerificationStatus | None = None
     details: AssetDetailUpdate | None = None
 
     @field_validator("asset_name", "asset_category")
@@ -69,7 +88,7 @@ class AssetUpdate(BaseModel):
 
     @field_validator("verification_status")
     @classmethod
-    def validate_optional_verification_status(cls, value: str | None) -> str | None:
+    def validate_optional_verification_status(cls, value: AssetVerificationStatus | None) -> AssetVerificationStatus | None:
         if value is None:
             return value
         allowed = {ASSET_VERIFICATION_UNKNOWN, ASSET_VERIFICATION_VERIFIED, ASSET_VERIFICATION_NEEDS_REVIEW, ASSET_VERIFICATION_CLOSED}
@@ -95,9 +114,9 @@ class AssetListResponse(BaseModel):
     description: str | None = None
     estimated_value: Decimal | None = None
     ownership_type: str | None = None
-    status: str
+    status: AssetStatus
     is_verified: bool
-    verification_status: str
+    verification_status: AssetVerificationStatus
     verified_at: datetime | None = None
     archived_at: datetime | None = None
     created_at: datetime

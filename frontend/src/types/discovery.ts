@@ -168,9 +168,9 @@ export type AssetResponse = {
   description?: string | null;
   estimated_value?: string | null;
   ownership_type?: string | null;
-  status: string;
+  status: 'Active' | 'Archived';
   is_verified: boolean;
-  verification_status: string;
+  verification_status: 'UNKNOWN' | 'VERIFIED' | 'NEEDS_REVIEW' | 'CLOSED';
   verified_at?: string | null;
   archived_at?: string | null;
   created_at: string;

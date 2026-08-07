@@ -3,7 +3,18 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.document import DOCUMENT_TYPE_VALUES
+from app.models.document import (
+    DOCUMENT_STATUS_ACTIVE,
+    DOCUMENT_STATUS_ARCHIVED,
+    DOCUMENT_STATUS_DELETED_PENDING_PURGE,
+    DOCUMENT_STATUS_REPLACED,
+    DOCUMENT_TYPE_VALUES,
+    DOCUMENT_VERIFICATION_EXPIRED,
+    DOCUMENT_VERIFICATION_NEEDS_REVIEW,
+    DOCUMENT_VERIFICATION_REPLACED,
+    DOCUMENT_VERIFICATION_UNKNOWN,
+    DOCUMENT_VERIFICATION_VERIFIED,
+)
 from app.services.document_validation import normalize_display_filename, validate_extension_and_mime
 
 DocumentUploadDiscoveryScanStatus = Literal[
@@ -13,6 +24,37 @@ DocumentUploadDiscoveryScanStatus = Literal[
     "COMPLETED_WITH_WARNINGS",
     "FAILED",
 ]
+
+DocumentStatus = Literal[
+    "ACTIVE",
+    "ARCHIVED",
+    "REPLACED",
+    "DELETED_PENDING_PURGE",
+]
+
+DocumentVerificationStatus = Literal[
+    "UNKNOWN",
+    "VERIFIED",
+    "NEEDS_REVIEW",
+    "EXPIRED",
+    "REPLACED",
+]
+
+DocumentUploadStatus = Literal["COMPLETED"]
+
+assert set(DocumentStatus.__args__) == {
+    DOCUMENT_STATUS_ACTIVE,
+    DOCUMENT_STATUS_ARCHIVED,
+    DOCUMENT_STATUS_REPLACED,
+    DOCUMENT_STATUS_DELETED_PENDING_PURGE,
+}
+assert set(DocumentVerificationStatus.__args__) == {
+    DOCUMENT_VERIFICATION_UNKNOWN,
+    DOCUMENT_VERIFICATION_VERIFIED,
+    DOCUMENT_VERIFICATION_NEEDS_REVIEW,
+    DOCUMENT_VERIFICATION_EXPIRED,
+    DOCUMENT_VERIFICATION_REPLACED,
+}
 
 
 class DocumentCreate(BaseModel):
@@ -67,8 +109,8 @@ class DocumentListResponse(BaseModel):
     original_filename: str | None = None
     mime_type: str | None = None
     file_size: int | None = None
-    status: str
-    verification_status: str
+    status: DocumentStatus
+    verification_status: DocumentVerificationStatus
     verified_at: datetime | None = None
     review_due_at: datetime | None = None
     effective_date: datetime | None = None
@@ -96,6 +138,6 @@ class DocumentUploadResponse(BaseModel):
     mime_type: str
     file_size: int
     checksum_sha256: str
-    upload_status: str
+    upload_status: DocumentUploadStatus
     updated_at: datetime
     discovery_scan: DocumentUploadDiscoveryScanResponse | None = None
