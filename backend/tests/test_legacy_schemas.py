@@ -10,6 +10,8 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.models.asset import (
+    ASSET_STATUS_ACTIVE,
+    ASSET_STATUS_ARCHIVED,
     ASSET_VERIFICATION_NEEDS_REVIEW,
     ASSET_VERIFICATION_UNKNOWN,
     ASSET_VERIFICATION_VERIFIED,
@@ -41,8 +43,14 @@ def test_asset_create_accepts_allowed_verification_statuses() -> None:
         assert asset.verification_status == status
 
 
+def test_asset_create_accepts_allowed_status_values() -> None:
+    for status in (ASSET_STATUS_ACTIVE, ASSET_STATUS_ARCHIVED):
+        asset = AssetCreate(asset_name="Checking", asset_category="Bank", status=status)
+        assert asset.status == status
+
+
 def test_asset_create_rejects_unknown_verification_status() -> None:
-    with pytest.raises(ValidationError, match="Unsupported asset verification status"):
+    with pytest.raises(ValidationError, match="Input should be 'UNKNOWN', 'VERIFIED', 'NEEDS_REVIEW' or 'CLOSED'"):
         AssetCreate(asset_name="Checking", asset_category="Bank", verification_status="bogus")
 
 
