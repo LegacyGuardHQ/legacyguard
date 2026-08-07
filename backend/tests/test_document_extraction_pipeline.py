@@ -17,6 +17,7 @@ from app.models.discovery import (
     EvidenceFinding,
 )
 from app.models.discovery_scan_document import (
+    DISCOVERY_DOCUMENT_STATUS_COMPLETED,
     DISCOVERY_DOCUMENT_STATUS_FAILED,
     DISCOVERY_DOCUMENT_STATUS_SKIPPED,
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
@@ -217,6 +218,23 @@ def test_unsupported_formats_do_not_create_partial_findings() -> None:
         orchestrator = DiscoveryOrchestrator(text_provider=provider)
         orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
         assert db.query(EvidenceFinding).count() == 0
+    finally:
+        db.close()
+
+
+def test_empty_documents_complete_with_warnings() -> None:
+    document_id, encrypted_bytes = _create_document_with_encrypted_content(mime_type="text/plain", plaintext=b"   \n  \r\n  ")
+    provider = EncryptedDocumentTextProvider(storage=MemoryStorage(encrypted_bytes))
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(text_provider=provider)
+        scan = orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+
+        assert scan.status == DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
+        assert db.query(EvidenceFinding).count() == 0
+        tracking = db.query(DiscoveryScanDocument).one()
+        assert tracking.status == DISCOVERY_DOCUMENT_STATUS_COMPLETED
+        assert tracking.warning_code is None
     finally:
         db.close()
 

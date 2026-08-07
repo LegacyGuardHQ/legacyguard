@@ -42,6 +42,7 @@ LegacyGuard is a privacy-first financial asset discovery platform designed to he
 - Phase 5.2 — Discovery Reliability Hardening
 - Phase 5.3 — Discovery Lifecycle Telemetry and Safe Status Visibility
 - Phase 5.4 — Background Job Monitoring & Failure Surfacing
+- Phase 5.5 — API Contract Hardening
 
 Manual asset conversion remains explicitly user-initiated. Converted assets stay `NEEDS_REVIEW`; LegacyGuard does not automatically verify them.
 
@@ -63,11 +64,11 @@ Manual asset conversion remains explicitly user-initiated. Converted assets stay
 
 ## Current Roadmap
 
-Completed: Phase 5.4.
+Completed: Phase 5.4 and Phase 5.5.
 
-Current milestone: Phase 5.5 — API Contract Hardening.
+Current milestone: Phase 5.6 — Extraction Reliability.
 
-Phase 5.5 work in progress: controlled Literal contracts have been hardened across discovery, documents, assets, beneficiaries, asset-beneficiary links, and legacy compatibility schemas.
+Phase 5.6 work in progress: extraction now treats empty or low-quality documents as completed-with-warnings and preserves clear semantics for unsupported or failed extraction paths.
 
 ## Validation
 

@@ -31,7 +31,11 @@ from app.services.audit import log_event
 from app.services.discovery_engine import DiscoveryEngine
 from app.services.discovery_privacy import DiscoveryPrivacyService
 from app.services.document_content_encryption import document_content_encryption_service
-from app.services.document_extraction import EXTRACTION_METHOD_UNSUPPORTED, DocumentExtractionService
+from app.services.document_extraction import (
+    EXTRACTION_METHOD_UNSUPPORTED,
+    DocumentExtractionService,
+    ExtractedDocumentText,
+)
 from app.services.document_storage import LocalDocumentStorage
 
 DISCOVERY_STARTED = "discovery_started"
@@ -112,7 +116,7 @@ class EncryptedDocumentTextProvider:
         normalized = self.extraction_service.extract_from_bytes(plaintext, mime_type=document.mime_type)
         if normalized.extraction_method == EXTRACTION_METHOD_UNSUPPORTED:
             raise UnsupportedDocumentExtractionError("Document format extraction is not supported")
-        return normalized.text
+        return ExtractedDocumentText(normalized.text, warnings=normalized.warnings)
 
 
 # Existing tests and integrations provide a simple four-argument callback. Audit
@@ -242,6 +246,7 @@ class DiscoveryOrchestrator:
 
             document_failures = 0
             documents_skipped = 0
+            documents_with_warnings = 0
             findings_created = 0
             for document in documents:
                 document_findings_created = 0
@@ -256,7 +261,9 @@ class DiscoveryOrchestrator:
                 db.refresh(tracking)
 
                 try:
-                    document_text = self.text_provider.get_text(document)
+                    extracted_result = self.text_provider.get_text(document)
+                    document_text = str(extracted_result)
+                    document_warnings = list(getattr(extracted_result, "warnings", []) or [])
                     candidates = self.discovery_engine.analyze_text(document_text)
                     for candidate in candidates:
                         privacy_result = self.privacy_service.sanitize_evidence(
@@ -291,6 +298,8 @@ class DiscoveryOrchestrator:
 
                     tracking.status = DISCOVERY_DOCUMENT_STATUS_COMPLETED
                     tracking.warning_code = None
+                    if document_warnings:
+                        documents_with_warnings += 1
                     scan.documents_processed += 1
                     self._audit(
                         db,
@@ -364,7 +373,7 @@ class DiscoveryOrchestrator:
                 scan.status = DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
             elif document_failures:
                 scan.status = DISCOVERY_SCAN_STATUS_FAILED
-            elif documents_skipped:
+            elif documents_with_warnings or documents_skipped:
                 scan.status = DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS
             else:
                 scan.status = DISCOVERY_SCAN_STATUS_COMPLETE
