@@ -22,6 +22,7 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_STATUS_FAILED,
     DISCOVERY_DOCUMENT_STATUS_PROCESSING,
     DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_EMPTY_DOCUMENT,
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
@@ -297,7 +298,11 @@ class DiscoveryOrchestrator:
                         )
 
                     tracking.status = DISCOVERY_DOCUMENT_STATUS_COMPLETED
-                    tracking.warning_code = None
+                    tracking.warning_code = (
+                        DISCOVERY_DOCUMENT_WARNING_EMPTY_DOCUMENT
+                        if any(warning == "Document content is empty" for warning in document_warnings)
+                        else None
+                    )
                     if document_warnings:
                         documents_with_warnings += 1
                     scan.documents_processed += 1

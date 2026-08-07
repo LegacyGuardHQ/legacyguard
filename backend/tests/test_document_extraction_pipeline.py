@@ -20,6 +20,7 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_STATUS_COMPLETED,
     DISCOVERY_DOCUMENT_STATUS_FAILED,
     DISCOVERY_DOCUMENT_STATUS_SKIPPED,
+    DISCOVERY_DOCUMENT_WARNING_EMPTY_DOCUMENT,
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
@@ -234,7 +235,7 @@ def test_empty_documents_complete_with_warnings() -> None:
         assert db.query(EvidenceFinding).count() == 0
         tracking = db.query(DiscoveryScanDocument).one()
         assert tracking.status == DISCOVERY_DOCUMENT_STATUS_COMPLETED
-        assert tracking.warning_code is None
+        assert tracking.warning_code == DISCOVERY_DOCUMENT_WARNING_EMPTY_DOCUMENT
     finally:
         db.close()
 

@@ -139,7 +139,7 @@ describe('ReviewQueuePage', () => {
     expect(await screen.findByText('Retirement Indicator', { selector: '.category-badge' })).toBeInTheDocument();
     await selectCategory(user, 'INSURANCE_INDICATOR');
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading discovery review queue');
+    expect(screen.getByText(/Loading discovery review queue/i).closest('.loading-card')).toBeInTheDocument();
     expect(screen.queryByText('Retirement Indicator', { selector: '.category-badge' })).not.toBeInTheDocument();
     expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(
       1,
@@ -156,6 +156,64 @@ describe('ReviewQueuePage', () => {
     });
 
     expect(await screen.findByText('Insurance Indicator', { selector: '.category-badge' })).toBeInTheDocument();
+  });
+
+  it('allows clearing the category filter from the page', async () => {
+    const user = userEvent.setup();
+    fetchDiscoveryReviewQueueMock.mockImplementation(
+      (
+        _page: number,
+        _pageSize: number,
+        status: DiscoveryReviewStatus,
+        category: DiscoveryFindingCategory | null
+      ) => Promise.resolve({
+        items: category ? [{ ...findingsByStatus[status], category }] : [findingsByStatus[status]],
+        total_count: 1,
+        page: 1,
+        page_size: 10,
+        total_pages: 1,
+      })
+    );
+
+    renderReviewQueue();
+
+    await screen.findByText('Retirement Indicator', { selector: '.category-badge' });
+    await selectCategory(user, 'INSURANCE_INDICATOR');
+
+    expect(await screen.findByText('Insurance Indicator', { selector: '.category-badge' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear category filter' }));
+
+    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('');
+    expect(await screen.findByText('Retirement Indicator', { selector: '.category-badge' })).toBeInTheDocument();
+    expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(1, 10, 'PENDING_REVIEW', null);
+  });
+
+  it('summarizes the current review view and active category filter', async () => {
+    const user = userEvent.setup();
+    fetchDiscoveryReviewQueueMock.mockImplementation(
+      (
+        _page: number,
+        _pageSize: number,
+        status: DiscoveryReviewStatus,
+        category: DiscoveryFindingCategory | null
+      ) => Promise.resolve({
+        items: category ? [{ ...findingsByStatus[status], category }] : [findingsByStatus[status]],
+        total_count: 1,
+        page: 1,
+        page_size: 10,
+        total_pages: 1,
+      })
+    );
+
+    renderReviewQueue();
+
+    expect(await screen.findByText('Showing pending review findings (1 total)')).toBeInTheDocument();
+
+    await selectCategory(user, 'INSURANCE_INDICATOR');
+
+    expect(await screen.findByText('Showing pending review findings filtered by Insurance Indicator (1 total)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear category filter' })).toBeInTheDocument();
   });
 
   it('resets pagination for category and status changes while preserving filtered navigation', async () => {
@@ -265,6 +323,17 @@ describe('ReviewQueuePage', () => {
     expect(await screen.findByText('No pending review findings match Banking Indicator.')).toBeInTheDocument();
   });
 
+  it('shows the clearer review status label and empty-state copy', async () => {
+    fetchDiscoveryReviewQueueMock.mockResolvedValue(queuePayload('PENDING_REVIEW'));
+
+    renderReviewQueue();
+
+    expect(await screen.findByText((_, element) => {
+      return element?.textContent === 'Current review status: Pending Review';
+    })).toBeInTheDocument();
+    expect(screen.getByText('Review automated rule-engine discovery findings. Inspect signal strength and update the review status for each finding.')).toBeInTheDocument();
+  });
+
   it('does not show pending findings or actions while a different status tab loads', async () => {
     const user = userEvent.setup();
     let resolveConfirmed!: (payload: PaginatedEvidenceFindingResponse) => void;
@@ -284,7 +353,7 @@ describe('ReviewQueuePage', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Confirmed' }));
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading discovery review queue');
+    expect(screen.getByText(/Loading discovery review queue/i).closest('.loading-card')).toBeInTheDocument();
     expect(screen.queryByText('Retirement Indicator', { selector: '.category-badge' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
     expect(fetchDiscoveryReviewQueueMock).toHaveBeenLastCalledWith(1, 10, 'CONFIRMED', null);

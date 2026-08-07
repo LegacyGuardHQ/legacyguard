@@ -68,7 +68,7 @@ Completed: Phase 5.4 and Phase 5.5.
 
 Current milestone: Phase 5.6 — Extraction Reliability.
 
-Phase 5.6 work in progress: extraction now treats empty or low-quality documents as completed-with-warnings and preserves clear semantics for unsupported or failed extraction paths.
+Phase 5.6 work in progress: extraction now treats empty or low-quality documents as completed-with-warnings, surfaces empty-document outcomes as explicit warning codes, and preserves clear semantics for unsupported or failed extraction paths. The review-queue experience also now exposes clearer status and filter guidance, including a summary of the current tab, any active category filter, and the total count of findings in the current view.
 
 ## Validation
 
