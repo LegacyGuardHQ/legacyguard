@@ -25,6 +25,17 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
 )
+from app.services.discovery_categories import (
+    BENEFICIARY_INDICATOR,
+    BANKING_INDICATOR,
+    EMPLOYMENT_BENEFIT_INDICATOR,
+    GOVERNMENT_BENEFIT_INDICATOR,
+    INSURANCE_INDICATOR,
+    INVESTMENT_INDICATOR,
+    OTHER_FINANCIAL_INDICATOR,
+    PROPERTY_INDICATOR,
+    RETIREMENT_INDICATOR,
+)
 
 T = TypeVar('T')
 
@@ -38,6 +49,32 @@ DiscoveryDocumentStatus = Literal[
 DiscoveryDocumentWarning = Literal[
     "PROCESSING_FAILED",
     "UNSUPPORTED_EXTRACTION",
+]
+
+DiscoveryFindingCategory = Literal[
+    "RETIREMENT_INDICATOR",
+    "INSURANCE_INDICATOR",
+    "INVESTMENT_INDICATOR",
+    "EMPLOYMENT_BENEFIT_INDICATOR",
+    "BANKING_INDICATOR",
+    "PROPERTY_INDICATOR",
+    "BENEFICIARY_INDICATOR",
+    "GOVERNMENT_BENEFIT_INDICATOR",
+    "OTHER_FINANCIAL_INDICATOR",
+]
+
+DiscoveryScanStatus = Literal[
+    "PENDING",
+    "RUNNING",
+    "COMPLETE",
+    "COMPLETED_WITH_WARNINGS",
+    "FAILED",
+]
+
+DiscoveryReviewStatus = Literal[
+    "PENDING_REVIEW",
+    "CONFIRMED",
+    "DISMISSED",
 ]
 
 DiscoveryLifecycleState = Literal[
@@ -58,6 +95,14 @@ DiscoveryProcessingOutcome = Literal[
     "RECOVERED_AND_COMPLETED",
 ]
 
+DiscoveryBackgroundJobState = Literal[
+    "QUEUED",
+    "RUNNING",
+    "RETRYING",
+    "FAILED",
+    "COMPLETED",
+]
+
 # Keep the public contract synchronized with the model's controlled values.
 assert set(DiscoveryDocumentStatus.__args__) == {
     DISCOVERY_DOCUMENT_STATUS_PENDING,
@@ -70,13 +115,36 @@ assert set(DiscoveryDocumentWarning.__args__) == {
     DISCOVERY_DOCUMENT_WARNING_PROCESSING_FAILED,
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
 }
+assert set(DiscoveryFindingCategory.__args__) == {
+    RETIREMENT_INDICATOR,
+    INSURANCE_INDICATOR,
+    INVESTMENT_INDICATOR,
+    EMPLOYMENT_BENEFIT_INDICATOR,
+    BANKING_INDICATOR,
+    PROPERTY_INDICATOR,
+    BENEFICIARY_INDICATOR,
+    GOVERNMENT_BENEFIT_INDICATOR,
+    OTHER_FINANCIAL_INDICATOR,
+}
+assert set(DiscoveryScanStatus.__args__) == {
+    DISCOVERY_SCAN_STATUS_PENDING,
+    DISCOVERY_SCAN_STATUS_RUNNING,
+    DISCOVERY_SCAN_STATUS_COMPLETE,
+    DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
+    DISCOVERY_SCAN_STATUS_FAILED,
+}
+assert set(DiscoveryReviewStatus.__args__) == {
+    EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+    EVIDENCE_REVIEW_STATUS_CONFIRMED,
+    EVIDENCE_REVIEW_STATUS_DISMISSED,
+}
 
 class DiscoveryScanDocumentSchema(BaseModel):
     id: str
     scan_id: str
     document_id: str
-    status: str
-    warning_code: str | None = None
+    status: DiscoveryDocumentStatus
+    warning_code: DiscoveryDocumentWarning | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -89,7 +157,7 @@ class DiscoveryScanCreate(BaseModel):
 
 class DiscoveryScanResponse(BaseModel):
     scan_id: str
-    status: str
+    status: DiscoveryScanStatus
     created_at: datetime
 
 
@@ -104,11 +172,22 @@ class DiscoveryScanStatusResponse(DiscoveryScanResponse):
         description="Controlled processing outcome for the current scan state.",
     )
     processing_outcome_message: str = Field(default="Processing is active", description="Privacy-safe user-facing processing outcome message.")
+    background_job_state: DiscoveryBackgroundJobState = Field(
+        default="QUEUED",
+        description="Controlled background job state for queued, active, retrying, failed, and completed scan processing.",
+    )
+    background_job_message: str = Field(
+        default="Queued for background processing",
+        description="Privacy-safe background processing message for queue, retry, and failure visibility.",
+    )
+    retry_count: int = Field(default=0, ge=0, description="Number of stale-run recovery retries recorded for this scan.")
+    failure_count: int = Field(default=0, ge=0, description="Number of recorded background processing failures for this scan.")
+    last_failure_at: datetime | None = None
 
 
 class DiscoveryScanSummaryResponse(BaseModel):
     scan_id: str
-    status: str
+    status: DiscoveryScanStatus
     documents_processed: int
     created_at: datetime
     completed_at: datetime | None = None
@@ -211,7 +290,7 @@ class PaginatedDiscoveryScanResponse(BaseModel):
 
 class DiscoveryReportSummaryResponse(BaseModel):
     scan_id: str
-    status: str
+    status: DiscoveryScanStatus
     total_findings: int
     categories: dict[str, int]
     review_statuses: dict[str, int]
@@ -225,14 +304,14 @@ class DiscoverySafeReportResponse(DiscoveryReportSummaryResponse):
 
 class EvidenceFindingResponse(BaseModel):
     finding_id: str
-    category: str
+    category: DiscoveryFindingCategory
     confidence_score: float = Field(
         description=(
             "Rule-based detection signal strength. It is not a probability, certainty, account "
             "ownership determination, financial verification, or guarantee that an asset exists."
         )
     )
-    review_status: str
+    review_status: DiscoveryReviewStatus
     created_at: datetime
 
 
@@ -273,7 +352,7 @@ class ManualAssetConversionRequest(BaseModel):
 
 
 class EvidenceFindingReviewRequest(BaseModel):
-    review_status: str
+    review_status: DiscoveryReviewStatus
 
     model_config = ConfigDict(extra="forbid")
 

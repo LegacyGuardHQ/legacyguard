@@ -1,13 +1,27 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.asset import (
+    ASSET_STATUS_ACTIVE,
+    ASSET_STATUS_ARCHIVED,
     ASSET_VERIFICATION_CLOSED,
     ASSET_VERIFICATION_NEEDS_REVIEW,
     ASSET_VERIFICATION_UNKNOWN,
     ASSET_VERIFICATION_VERIFIED,
 )
+
+AssetStatus = Literal["Active", "Archived"]
+AssetVerificationStatus = Literal["UNKNOWN", "VERIFIED", "NEEDS_REVIEW", "CLOSED"]
+
+assert set(AssetStatus.__args__) == {ASSET_STATUS_ACTIVE, ASSET_STATUS_ARCHIVED}
+assert set(AssetVerificationStatus.__args__) == {
+    ASSET_VERIFICATION_UNKNOWN,
+    ASSET_VERIFICATION_VERIFIED,
+    ASSET_VERIFICATION_NEEDS_REVIEW,
+    ASSET_VERIFICATION_CLOSED,
+}
 
 
 class AssetCreate(BaseModel):
@@ -17,9 +31,9 @@ class AssetCreate(BaseModel):
     description: str | None = None
     estimated_value: float | None = Field(default=None, ge=0)
     ownership_type: str | None = None
-    status: str | None = None
+    status: AssetStatus | None = None
     is_verified: bool = False
-    verification_status: str = ASSET_VERIFICATION_UNKNOWN
+    verification_status: AssetVerificationStatus = ASSET_VERIFICATION_UNKNOWN
 
     @field_validator("asset_name")
     @classmethod
@@ -37,7 +51,7 @@ class AssetCreate(BaseModel):
 
     @field_validator("verification_status")
     @classmethod
-    def validate_verification_status(cls, value: str) -> str:
+    def validate_verification_status(cls, value: AssetVerificationStatus) -> AssetVerificationStatus:
         allowed = {
             ASSET_VERIFICATION_UNKNOWN,
             ASSET_VERIFICATION_VERIFIED,

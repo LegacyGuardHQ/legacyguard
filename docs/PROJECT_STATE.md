@@ -41,6 +41,7 @@ LegacyGuard is a privacy-first financial asset discovery platform designed to he
 - Phase 5.1 — Dependency Baseline and CI Health
 - Phase 5.2 — Discovery Reliability Hardening
 - Phase 5.3 — Discovery Lifecycle Telemetry and Safe Status Visibility
+- Phase 5.4 — Background Job Monitoring & Failure Surfacing
 
 Manual asset conversion remains explicitly user-initiated. Converted assets stay `NEEDS_REVIEW`; LegacyGuard does not automatically verify them.
 
@@ -58,11 +59,15 @@ Manual asset conversion remains explicitly user-initiated. Converted assets stay
 - `PATCH /discovery/findings/{finding_id}`
 - `POST /discovery/findings/{finding_id}/assets`
 
+`GET /discovery/scans/{scan_id}` now includes privacy-safe background job monitoring fields: `background_job_state`, `background_job_message`, `retry_count`, `failure_count`, and `last_failure_at`.
+
 ## Current Roadmap
 
-Completed: Phase 5.3.
+Completed: Phase 5.4.
 
-Next milestone: Phase 5.4 — Background Job Monitoring & Failure Surfacing.
+Current milestone: Phase 5.5 — API Contract Hardening.
+
+Phase 5.5 work in progress: controlled Literal contracts have been hardened across discovery, documents, assets, beneficiaries, asset-beneficiary links, and legacy compatibility schemas.
 
 ## Validation
 

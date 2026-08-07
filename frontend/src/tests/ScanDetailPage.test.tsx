@@ -50,6 +50,11 @@ const sampleScan: DiscoveryScanStatusResponse = {
   recovered_at: null,
   processing_outcome: 'COMPLETED',
   processing_outcome_message: 'Completed successfully',
+  background_job_state: 'COMPLETED',
+  background_job_message: 'Background processing completed',
+  retry_count: 0,
+  failure_count: 0,
+  last_failure_at: null,
 };
 
 const sampleRunningScan: DiscoveryScanStatusResponse = {
@@ -63,6 +68,11 @@ const sampleRunningScan: DiscoveryScanStatusResponse = {
   recovered_at: null,
   processing_outcome: 'IN_PROGRESS',
   processing_outcome_message: 'Processing is active',
+  background_job_state: 'RUNNING',
+  background_job_message: 'Background processing is active',
+  retry_count: 0,
+  failure_count: 0,
+  last_failure_at: null,
 };
 
 const sampleRecoveredScan: DiscoveryScanStatusResponse = {
@@ -71,6 +81,11 @@ const sampleRecoveredScan: DiscoveryScanStatusResponse = {
   lifecycle_state: 'COMPLETED',
   recovered_from_stale: true,
   recovered_at: '2026-08-01T10:06:00Z',
+  processing_outcome: 'RECOVERED_AND_COMPLETED',
+  processing_outcome_message: 'Recovered and completed',
+  background_job_state: 'COMPLETED',
+  background_job_message: 'Background processing completed',
+  retry_count: 1,
 };
 
 const sampleSummary: DiscoveryReportSummaryResponse = {
@@ -252,6 +267,7 @@ describe('ScanDetailPage', () => {
     renderScanDetailPage();
 
     expect(await screen.findByRole('status')).toHaveTextContent('Discovery processing is active');
+    expect(screen.getByText('Background job:').closest('p')).toHaveTextContent('RUNNING');
   });
 
   it('renders lifecycle and recovery messaging without technical error details', async () => {
@@ -263,10 +279,36 @@ describe('ScanDetailPage', () => {
 
     renderScanDetailPage();
 
-    expect(await screen.findByText('Completed successfully')).toBeInTheDocument();
+    expect(await screen.findByText('Background processing completed')).toBeInTheDocument();
     expect(screen.getByText('Recovered and completed')).toBeInTheDocument();
+    expect(screen.getByText('Retries:').closest('p')).toHaveTextContent('1');
     expect(screen.getByText(/Recovered at/i)).toBeInTheDocument();
     expect(screen.queryByText(/Traceback|Exception|internal error/i)).not.toBeInTheDocument();
+  });
+
+  it('surfaces background retry and failure metadata with privacy-safe wording', async () => {
+    fetchScanMock.mockResolvedValue({
+      ...sampleRunningScan,
+      background_job_state: 'RETRYING',
+      background_job_message: 'Retrying background processing',
+      retry_count: 2,
+      failure_count: 1,
+      last_failure_at: '2026-08-01T10:04:00Z',
+    });
+    fetchSummaryMock.mockResolvedValue(sampleSummary);
+    fetchReportMock.mockResolvedValue(sampleReport);
+    fetchDocumentsMock.mockResolvedValue(sampleDocuments);
+    fetchFindingsMock.mockResolvedValue(sampleFindings);
+
+    renderScanDetailPage();
+
+    expect(await screen.findByRole('status')).toHaveTextContent('retrying in the background');
+    expect(screen.getByText('Lifecycle:').closest('p')).toHaveTextContent('Retrying background processing');
+    expect(screen.getByText('Background job:').closest('p')).toHaveTextContent('RETRYING');
+    expect(screen.getByText('Retries:').closest('p')).toHaveTextContent('2');
+    expect(screen.getByText('Failures:').closest('p')).toHaveTextContent('1');
+    expect(screen.getByText(/Last failure:/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Exception|Traceback|private|storage_path/i)).not.toBeInTheDocument();
   });
 
   it('stays behind authentication boundary for protected routes', async () => {
