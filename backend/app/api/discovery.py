@@ -233,7 +233,7 @@ def _finding_detail_response(finding: EvidenceFinding, document: Document) -> Ev
 
 
 
-def _asset_response(asset: Asset) -> AssetResponse:
+def _asset_response(asset: Asset, db: Session) -> AssetResponse:
     detail = asset.details
     detail_response = None
     if detail is not None:
@@ -245,6 +245,14 @@ def _asset_response(asset: Asset) -> AssetResponse:
             notes=detail.get_decrypted_value("notes_encrypted"),
             claim_instructions=detail.get_decrypted_value("claim_instructions_encrypted"),
         )
+    source_context = None
+    link = (
+        db.query(DiscoveryFindingAssetLink)
+        .filter(DiscoveryFindingAssetLink.asset_id == asset.id)
+        .first()
+    )
+    if link is not None:
+        source_context = link.source_context
     return AssetResponse(
         id=asset.id,
         asset_category=asset.asset_category,
@@ -261,6 +269,7 @@ def _asset_response(asset: Asset) -> AssetResponse:
         created_at=asset.created_at,
         updated_at=asset.updated_at,
         details=detail_response,
+        source_context=source_context,
     )
 
 
@@ -603,6 +612,7 @@ def create_asset_from_discovery_finding(
         finding_id=finding.id,
         asset_id=asset.id,
         user_id=current_user.id,
+        source_context="manual_conversion_from_confirmed_finding",
     ))
     try:
         log_event(
@@ -626,7 +636,7 @@ def create_asset_from_discovery_finding(
             status_code=status.HTTP_409_CONFLICT,
             detail="An asset has already been created from this finding",
         ) from exc
-    return _asset_response(asset)
+    return _asset_response(asset, db)
 
 
 @router.patch("/findings/{finding_id}", response_model=EvidenceFindingResponse)

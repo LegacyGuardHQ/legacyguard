@@ -32,6 +32,19 @@ function formatReviewStatus(status: string) {
   return formatCategory(status);
 }
 
+function getReviewStatusDescription(status: string) {
+  if (status === 'PENDING_REVIEW') {
+    return 'Still awaiting human review and should not be treated as confirmed.';
+  }
+  if (status === 'CONFIRMED') {
+    return 'Reviewed and confirmed as a signal, not as proof.';
+  }
+  if (status === 'DISMISSED') {
+    return 'Set aside for now and can be reopened later.';
+  }
+  return 'Review state available.';
+}
+
 function formatDocumentWarning(warningCode: string | null) {
   if (!warningCode) return null;
   if (warningCode === 'UNSUPPORTED_EXTRACTION') {
@@ -255,7 +268,7 @@ export default function ScanDetailPage() {
                 <dl className="summary-list">
                   {Object.entries(summaryQuery.data.review_statuses).map(([statusKey, count]) => (
                     <div key={statusKey} className="summary-row">
-                      <dt>{formatCategory(statusKey)}</dt>
+                      <dt>{formatReviewStatus(statusKey)}</dt>
                       <dd>{count}</dd>
                     </div>
                   ))}
@@ -268,6 +281,9 @@ export default function ScanDetailPage() {
             <p>
               <strong>Trust & Privacy Notice:</strong> Signal strength indicators are rule-based detection cues. They
               do not guarantee asset existence or ownership. Structured human review is required before taking any action.
+            </p>
+            <p>
+              <strong>Review guidance:</strong> {getReviewStatusDescription(Object.keys(summaryQuery.data.review_statuses)[0] ?? 'PENDING_REVIEW')}
             </p>
           </div>
         </section>

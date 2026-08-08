@@ -66,7 +66,7 @@ export type PaginatedDiscoveryScansResponse = {
 
 export type DiscoveryDocumentStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
 
-export type DiscoveryDocumentWarning = 'PROCESSING_FAILED' | 'UNSUPPORTED_EXTRACTION';
+export type DiscoveryDocumentWarning = 'PROCESSING_FAILED' | 'UNSUPPORTED_EXTRACTION' | 'EMPTY_DOCUMENT';
 
 export type DiscoveryScanStatusResponse = {
   scan_id: string;
@@ -176,4 +176,5 @@ export type AssetResponse = {
   created_at: string;
   updated_at: string;
   details?: AssetDetailResponse | null;
+  source_context?: string | null;
 };

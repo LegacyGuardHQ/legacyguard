@@ -114,6 +114,7 @@ def test_confirmed_finding_can_be_manually_converted_to_unverified_asset() -> No
     assert payload["is_verified"] is False
     assert payload["verification_status"] == ASSET_VERIFICATION_NEEDS_REVIEW
     assert payload["details"]["notes"] == "Call the plan administrator to verify ownership"
+    assert payload["source_context"] == "manual_conversion_from_confirmed_finding"
 
     db = SessionLocal()
     try:
@@ -123,6 +124,7 @@ def test_confirmed_finding_can_be_manually_converted_to_unverified_asset() -> No
         assert link.finding_id == finding_id
         assert link.asset_id == asset.id
         assert link.user_id == user_id
+        assert link.source_context == "manual_conversion_from_confirmed_finding"
         assert asset.is_verified is False
         assert asset.verification_status == ASSET_VERIFICATION_NEEDS_REVIEW
         assert asset.details.notes_encrypted != "Call the plan administrator to verify ownership"

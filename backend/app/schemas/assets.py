@@ -125,3 +125,4 @@ class AssetListResponse(BaseModel):
 
 class AssetResponse(AssetListResponse):
     details: AssetDetailResponse | None = None
+    source_context: str | None = None

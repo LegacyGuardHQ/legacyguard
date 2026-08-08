@@ -34,9 +34,9 @@ const reviewStatusLabels: Record<DiscoveryReviewStatus, string> = {
 };
 
 const reviewStatusDescriptions: Record<DiscoveryReviewStatus, string> = {
-  PENDING_REVIEW: 'Waiting for your review.',
-  CONFIRMED: 'Reviewed and confirmed.',
-  DISMISSED: 'Reviewed and dismissed.',
+  PENDING_REVIEW: 'Still needs your review and should not be treated as confirmed.',
+  CONFIRMED: 'Reviewed and confirmed as a signal, not as proof.',
+  DISMISSED: 'Set aside for now and can be reopened later.',
 };
 
 function formatCategoryLabel(category: string): string {
