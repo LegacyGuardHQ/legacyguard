@@ -23,6 +23,16 @@ function formatReviewStatus(status: DiscoveryReviewStatus): string {
   return formatLabel(status);
 }
 
+function getReviewStatusDescription(status: DiscoveryReviewStatus): string {
+  if (status === 'PENDING_REVIEW') {
+    return 'This finding is still waiting for your review and should not be treated as confirmed.';
+  }
+  if (status === 'CONFIRMED') {
+    return 'You confirmed this finding as a reviewed signal. It remains an unverified signal, not proof.';
+  }
+  return 'You dismissed this finding for now. It will stay out of the active review queue until you reopen it.';
+}
+
 function formatTimestamp(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
     new Date(value)
@@ -194,6 +204,9 @@ function ManualAssetConversion({ findingId }: { findingId: string }) {
             This asset remains unverified and requires your review before it should be relied upon.
           </p>
         </div>
+        <p>
+          This asset was created from a confirmed discovery finding and should still be reviewed before it is relied upon.
+        </p>
         <dl className="conversion-result" aria-live="polite">
           <div>
             <dt>Asset reference</dt>
@@ -366,7 +379,8 @@ export default function FindingDetailPage() {
 
       {updateMutation.isSuccess ? (
         <div className="finding-feedback finding-feedback-success" role="status" aria-live="polite">
-          Finding status updated.
+          <p>Finding status updated.</p>
+          <p>{getReviewStatusDescription(finding.review_status)}</p>
         </div>
       ) : null}
 

@@ -22,4 +22,5 @@ class DiscoveryFindingAssetLink(Base):
         index=True,
     )
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_context = Column(String, nullable=False, default="manual_conversion", index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

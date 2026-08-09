@@ -226,6 +226,7 @@ describe('FindingDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Asset created for review' })).toBeInTheDocument();
     expect(screen.getByText('asset/created-1')).toBeInTheDocument();
     expect(screen.getByText('Needs Review')).toBeInTheDocument();
+    expect(screen.getByText('This asset was created from a confirmed discovery finding and should still be reviewed before it is relied upon.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create asset for review' })).not.toBeInTheDocument();
   });
 
@@ -369,6 +370,7 @@ describe('FindingDetailPage', () => {
 
     expect(updateDiscoveryFindingStatusMock).toHaveBeenCalledWith('finding/123', 'CONFIRMED');
     expect(await screen.findByText('Finding status updated.')).toBeInTheDocument();
+    expect(screen.getByText('You confirmed this finding as a reviewed signal. It remains an unverified signal, not proof.')).toBeInTheDocument();
     expect(screen.getByText('Confirmed', { selector: '.finding-review-status' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reopen' })).toBeInTheDocument();
     await waitFor(() => expect(fetchDiscoveryFindingMock).toHaveBeenCalledTimes(2));
