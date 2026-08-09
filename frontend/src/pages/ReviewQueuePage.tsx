@@ -15,10 +15,26 @@ const REVIEW_TABS: ReadonlyArray<{
   status: DiscoveryReviewStatus;
   label: string;
   id: string;
+  helperText: string;
 }> = [
-  { status: 'PENDING_REVIEW', label: 'Pending Review', id: 'review-tab-pending' },
-  { status: 'CONFIRMED', label: 'Confirmed', id: 'review-tab-confirmed' },
-  { status: 'DISMISSED', label: 'Dismissed', id: 'review-tab-dismissed' },
+  {
+    status: 'PENDING_REVIEW',
+    label: 'Pending Review',
+    id: 'review-tab-pending',
+    helperText: 'Findings that still need your review before they are treated as confirmed or dismissed.',
+  },
+  {
+    status: 'CONFIRMED',
+    label: 'Confirmed',
+    id: 'review-tab-confirmed',
+    helperText: 'Findings that you marked as reviewed and confirmed for the current record.',
+  },
+  {
+    status: 'DISMISSED',
+    label: 'Dismissed',
+    id: 'review-tab-dismissed',
+    helperText: 'Findings that you decided are not relevant or should be ignored for now.',
+  },
 ];
 
 function formatCategory(category: string): string {
@@ -119,6 +135,9 @@ export default function ReviewQueuePage() {
             </button>
           ))}
         </div>
+        <p className="review-tab-helper" aria-live="polite">
+          {activeTabConfig.helperText}
+        </p>
         <div className="category-filter">
           <label htmlFor="review-category-filter">Category</label>
           <div className="category-filter-controls">
@@ -195,13 +214,41 @@ export default function ReviewQueuePage() {
               <div className="card empty-card">
                 <h3>No findings found</h3>
                 {selectedCategoryLabel ? (
-                  <p>No {activeTabConfig.label.toLowerCase()} findings match {selectedCategoryLabel}.</p>
+                  <>
+                    <p>No {activeTabConfig.label.toLowerCase()} findings match {selectedCategoryLabel}.</p>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-inline"
+                      onClick={() => {
+                        updateMutation.reset();
+                        setCategory(null);
+                        setPage(1);
+                      }}
+                    >
+                      Clear category filter
+                    </button>
+                  </>
                 ) : (
-                  <p>
-                    {activeTab === 'PENDING_REVIEW' && 'There are no findings waiting for review in this queue.'}
-                    {activeTab === 'CONFIRMED' && 'No findings have been confirmed in this review queue yet.'}
-                    {activeTab === 'DISMISSED' && 'No findings have been dismissed in this review queue yet.'}
-                  </p>
+                  <>
+                    <p>
+                      {activeTab === 'PENDING_REVIEW' && 'There are no findings waiting for review in this queue.'}
+                      {activeTab === 'CONFIRMED' && 'No findings have been confirmed in this review queue yet.'}
+                      {activeTab === 'DISMISSED' && 'No findings have been dismissed in this review queue yet.'}
+                    </p>
+                    {activeTab !== 'PENDING_REVIEW' && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-inline"
+                        onClick={() => {
+                          updateMutation.reset();
+                          setActiveTab('PENDING_REVIEW');
+                          setPage(1);
+                        }}
+                      >
+                        View pending review
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             ) : (
