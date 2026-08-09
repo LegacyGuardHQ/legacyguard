@@ -12,6 +12,7 @@ from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserR
 from app.config import settings
 from app.security.auth import create_access_token, create_refresh_token, get_current_user, get_db, get_password_hash, verify_password
 from app.services.audit import log_event
+from app.services.operational_logging import log_event as operational_log_event
 from app.services.rate_limit import rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -48,16 +49,19 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request
     allowed, retry_after = rate_limiter.allow(client_key)
     if not allowed:
         log_event(db=db, user_id=None, event_type="LOGIN_FAILED", details="Rate limited", request=request)
+        operational_log_event("auth_failure", event_category="auth", severity="warning", reason="rate_limited")
         db.commit()
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many attempts")
 
     user = db.query(User).filter(User.email == str(payload.email).lower()).first()
     if not user or not verify_password(payload.password, user.password_hash):
         log_event(db=db, user_id=user.id if user else None, event_type="LOGIN_FAILED", details="Invalid credentials", request=request)
+        operational_log_event("auth_failure", event_category="auth", severity="warning", reason="invalid_credentials")
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
+        operational_log_event("auth_failure", event_category="auth", severity="warning", reason="account_disabled")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
 
     user.last_login = datetime.now(timezone.utc)
