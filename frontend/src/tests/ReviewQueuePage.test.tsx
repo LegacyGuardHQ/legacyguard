@@ -99,6 +99,7 @@ describe('ReviewQueuePage', () => {
 
     expect(await screen.findByText('85%')).toBeInTheDocument();
     expect(screen.queryByText('8500%')).not.toBeInTheDocument();
+    expect(screen.getByText('Findings that still need your review before they are treated as confirmed or dismissed.')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('');
     expect(screen.getAllByRole('option')).toHaveLength(10);
 
@@ -320,7 +321,34 @@ describe('ReviewQueuePage', () => {
     await screen.findByText('Retirement Indicator', { selector: '.category-badge' });
     await selectCategory(user, 'BANKING_INDICATOR');
 
+    const emptyCard = screen.getByText('No pending review findings match Banking Indicator.').closest('.empty-card');
     expect(await screen.findByText('No pending review findings match Banking Indicator.')).toBeInTheDocument();
+    expect(within(emptyCard as HTMLElement).getByRole('button', { name: 'Clear category filter' })).toBeInTheDocument();
+  });
+
+  it('offers a quick escape hatch when a tab has no findings', async () => {
+    const user = userEvent.setup();
+    fetchDiscoveryReviewQueueMock.mockImplementation(
+      (_page: number, _pageSize: number, status: DiscoveryReviewStatus) => Promise.resolve(
+        status === 'CONFIRMED'
+          ? {
+              items: [],
+              total_count: 0,
+              page: 1,
+              page_size: 10,
+              total_pages: 0,
+            }
+          : queuePayload(status)
+      )
+    );
+
+    renderReviewQueue();
+
+    await screen.findByText('Retirement Indicator', { selector: '.category-badge' });
+    await user.click(screen.getByRole('tab', { name: 'Confirmed' }));
+
+    expect(await screen.findByText('No findings found')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View pending review' })).toBeInTheDocument();
   });
 
   it('shows the clearer review status label and empty-state copy', async () => {
