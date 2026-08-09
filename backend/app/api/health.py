@@ -1,9 +1,11 @@
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.config import settings
 from app.database.connection import SessionLocal
 from app.services.document_storage import LocalDocumentStorage
+from app.services.operational_logging import log_event
 
 router = APIRouter()
 
@@ -13,9 +15,10 @@ document_storage = LocalDocumentStorage(settings.document_storage_root or "priva
 def check_database_ready() -> bool:
     try:
         with SessionLocal() as session:
-            session.execute("SELECT 1")
+            session.execute(text("SELECT 1"))
         return True
     except Exception:
+        log_event("ready_check_failed", event_category="health", severity="warning", dependency="database")
         return False
 
 
@@ -24,6 +27,7 @@ def check_storage_ready() -> bool:
         document_storage.exists("00000000-0000-0000-0000-000000000000")
         return True
     except Exception:
+        log_event("ready_check_failed", event_category="health", severity="warning", dependency="storage")
         return False
 
 
@@ -53,4 +57,5 @@ def ready_check() -> JSONResponse:
     }
     if all(value == "ok" for value in checks.values()):
         return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok", "checks": checks})
+    log_event("ready_check_degraded", event_category="health", severity="warning", checks=checks)
     return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"status": "degraded", "checks": checks})

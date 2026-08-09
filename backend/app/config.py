@@ -68,7 +68,11 @@ class Settings(BaseSettings):
         return [origin.strip().rstrip("/") for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
+def get_settings() -> Settings:
+    return Settings()
+
+
 try:
-    settings = Settings()
+    settings = get_settings()
 except ValidationError as exc:
     raise RuntimeError(f"Invalid environment configuration: {exc}") from exc
