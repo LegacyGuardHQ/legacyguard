@@ -109,6 +109,40 @@ Restore requires the same environment values and the same encryption key. Losing
 - frontend points to the intended API base URL
 - run scripts/production_smoke_test.py against a safe temporary production-style configuration
 
+## RC release gate
+
+Treat the following as the minimum release gate before promoting a release candidate:
+
+1. Run the backend test suite:
+
+```bash
+cd backend
+python -m pytest
+```
+
+2. Run the frontend test suite and production build:
+
+```bash
+cd frontend
+npm test
+npm run build
+```
+
+3. Verify the database can be upgraded to the latest Alembic head:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+4. Run the production smoke test:
+
+```bash
+python scripts/production_smoke_test.py
+```
+
+5. Record the result in the deployment ticket or release notes before sign-off.
+
 ## Incident handling
 
 - treat logs as operational evidence only; do not copy secrets, tokens, raw request bodies, or document contents into incident tickets

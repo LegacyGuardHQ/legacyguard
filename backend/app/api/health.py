@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database.connection import SessionLocal
+from app.services.alembic_readiness import check_migration_readiness
 from app.services.document_storage import LocalDocumentStorage
 from app.services.operational_logging import log_event
 
@@ -32,7 +33,7 @@ def check_storage_ready() -> bool:
 
 
 def check_migration_ready() -> bool:
-    return True
+    return check_migration_readiness()
 
 
 @router.get("/health")

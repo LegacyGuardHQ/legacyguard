@@ -4,6 +4,9 @@ from collections.abc import Mapping
 from typing import Any
 
 logger = logging.getLogger("legacyguard")
+logger.setLevel(logging.INFO)
+logger.propagate = True
+logging.getLogger().setLevel(logging.INFO)
 
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEYS = {
@@ -54,4 +57,20 @@ def sanitize_for_logging(value: Any, *, depth: int = 0) -> Any:
 
 
 def log_event(event: str, *, level: int = logging.INFO, **metadata: Any) -> None:
-    logger.log(level, "event=%s %s", event, sanitize_for_logging(metadata))
+    logger.disabled = False
+    logger.propagate = True
+    logger.setLevel(logging.INFO)
+    logging.disable(logging.NOTSET)
+
+    message = f"event={event} {sanitize_for_logging(metadata)}"
+    record = logger.makeRecord(
+        logger.name,
+        level,
+        __file__,
+        0,
+        message,
+        (),
+        None,
+        func="log_event",
+    )
+    logger.handle(record)
