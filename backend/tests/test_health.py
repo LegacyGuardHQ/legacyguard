@@ -1,7 +1,13 @@
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+
+from app.services.alembic_readiness import (
+    check_migration_readiness,
+    upgrade_database_to_head,
+)
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-123456")
@@ -50,3 +56,20 @@ def test_ready_endpoint_reports_degraded_when_dependencies_fail() -> None:
         "status": "degraded",
         "checks": {"database": "failed", "storage": "failed", "migrations": "failed"},
     }
+
+
+def test_migration_readiness_reports_healthy_after_upgrade(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'legacyguard-upgraded.db'}"
+    upgrade_database_to_head(database_url=database_url)
+
+    assert check_migration_readiness(database_url=database_url) is True
+
+
+def test_migration_readiness_reports_unhealthy_for_unmigrated_database(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'legacyguard-stale.db'}"
+
+    assert check_migration_readiness(database_url=database_url) is False
+
+
+def test_migration_readiness_reports_unhealthy_when_revision_lookup_fails() -> None:
+    assert check_migration_readiness(database_url="sqlite:///:memory:") is False
