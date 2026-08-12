@@ -109,6 +109,36 @@ Restore requires the same environment values and the same encryption key. Losing
 - frontend points to the intended API base URL
 - run scripts/production_smoke_test.py against a safe temporary production-style configuration
 
+## RC1 recovery verification tool
+
+Use scripts/rc1_recovery_verification.py to execute deterministic backup, restore, and rollback proof using only temporary test artifacts.
+
+Requirements:
+
+- Python 3.12.x
+- repository backend dependencies installed in the known-good backend Python 3.12 environment
+
+Run from repository root:
+
+```bash
+backend/.venv312/Scripts/python.exe scripts/rc1_recovery_verification.py
+```
+
+Expected success criteria:
+
+- exit code is 0
+- BACKUP_EXECUTED_AND_VERIFIED appears
+- RESTORE_EXECUTED_AND_VERIFIED appears
+- ROLLBACK_EXECUTED_AND_VERIFIED appears
+- CLEANUP_SUCCESS appears
+
+Safety constraints:
+
+- uses temporary SQLite and temporary document storage only
+- uses temporary generated test-only secrets and encryption key
+- does not use real production data or credentials
+- do not substitute production secrets, production databases, or production storage paths
+
 ## RC release gate
 
 Treat the following as the minimum release gate before promoting a release candidate:
