@@ -1,0 +1,46 @@
+name: Partnership or pilot idea
+description: Propose a mission-aligned collaboration without sharing confidential information.
+title: "[Partnership]: "
+labels: ["partnership", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share only public, non-confidential information. Do not include client, patient, donor, beneficiary, or financial records.
+  - type: dropdown
+    attributes:
+      label: Collaboration type
+      options:
+        - Community or nonprofit partnership
+        - Security or privacy review
+        - Legal or estate-planning guidance
+        - Accessibility or user research
+        - Controlled pilot
+        - Funding or sponsorship introduction
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Public description
+      description: Describe the organization or idea using public information only.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed mutual benefit
+      description: Explain the outcome for families, contributors, and the project.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Safety and independence
+      description: Identify privacy, conflicts-of-interest, data access, or governance considerations.
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Confirmation
+      options:
+        - label: This proposal contains no confidential or personal information and requires no access to user data.
+          required: true

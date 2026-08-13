@@ -77,3 +77,20 @@ pytest
 - Keep audit trails for privileged changes
 - Avoid storing secrets in source control
 - Plan for future MFA and role-based access
+
+## Join the project
+
+LegacyGuard is open source and welcomes careful contributions from developers,
+security reviewers, designers, documentation writers, and mission-aligned
+partners.
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change.
+- Use the guided [issue templates](.github/ISSUE_TEMPLATE) for bugs, features,
+  security reviews, and partnership ideas.
+- Review [SUPPORT.md](SUPPORT.md) for the current funding policy and safe ways
+  to help.
+- Visit the [LegacyGuard public project site](https://legacyguard-continuity.james23sf.chatgpt.site/).
+
+The public project does not currently accept or store real personal, estate,
+financial, medical, or credential information. Please use synthetic data in
+all demonstrations and bug reports.

@@ -1,0 +1,42 @@
+name: Feature or design proposal
+description: Suggest a focused product, accessibility, design, or documentation improvement.
+title: "[Proposal]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: dropdown
+    attributes:
+      label: Area
+      options:
+        - Accessibility
+        - User experience or design
+        - Backend or API
+        - Frontend
+        - Documentation
+        - Testing or reliability
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Problem to solve
+      description: Explain the user need without including personal information.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed outcome
+      description: Describe the result rather than prescribing a large implementation.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Privacy and security considerations
+      description: Note data, authorization, misuse, accessibility, or safety implications.
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Readiness
+      options:
+        - label: I searched existing issues and used no real personal or sensitive data.
+          required: true

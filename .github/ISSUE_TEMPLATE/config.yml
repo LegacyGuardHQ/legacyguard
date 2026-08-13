@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security reporting guidance
+    url: https://github.com/jh505tt-create/legacyguard/blob/master/docs/SECURITY.md
+    about: Do not disclose exploitable vulnerabilities in a public issue.
+  - name: LegacyGuard public project site
+    url: https://legacyguard-continuity.james23sf.chatgpt.site/
+    about: Learn about the mission, roadmap, and safe ways to support the project.

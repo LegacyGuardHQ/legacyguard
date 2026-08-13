@@ -1,0 +1,44 @@
+name: Security hardening review
+description: Propose non-sensitive security review or hardening work. Report vulnerabilities privately.
+title: "[Security review]: "
+labels: ["security", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not disclose an exploitable vulnerability here. Follow docs/SECURITY.md for private reporting. This form is for review proposals, defense-in-depth work, and already-public security topics.
+  - type: checkboxes
+    attributes:
+      label: Disclosure check
+      options:
+        - label: This issue does not disclose a new exploitable vulnerability or sensitive evidence.
+          required: true
+        - label: I removed secrets, personal information, and production data.
+          required: true
+  - type: dropdown
+    attributes:
+      label: Review area
+      options:
+        - Authentication and sessions
+        - Authorization and owner scoping
+        - Encryption and key handling
+        - Audit and logging
+        - Document processing
+        - Dependency or supply-chain safety
+        - Deployment and operations
+        - Threat modeling
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed review
+      description: Define the defensive question, scope, and expected deliverable.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Acceptance criteria
+      description: How will the review or hardening work be considered complete?
+    validations:
+      required: true

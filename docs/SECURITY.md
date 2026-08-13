@@ -1,5 +1,21 @@
 # LegacyGuard Security Design
 
+## Reporting a vulnerability
+
+Do not disclose a suspected vulnerability, exploit, sensitive log, secret, or
+personal information in a public issue or discussion.
+
+Use **Report a vulnerability** on the repository's **Security** tab when that
+option is available. If it is not available, contact the maintainer through the
+public GitHub profile only to request a private reporting channel; do not include
+technical vulnerability details in the initial public message.
+
+Include the affected version, a concise impact statement, safe reproduction
+steps, and suggested remediation when possible. Use synthetic data and allow a
+reasonable period for validation and coordinated remediation before public
+disclosure. The project will acknowledge receipt, investigate in good faith,
+and avoid requesting real user data as evidence.
+
 ## Authentication Design
 LegacyGuard uses a JWT-based authentication model with a server-side session registry. Access tokens are short-lived, refresh tokens are longer-lived, and sessions can be revoked individually or across all devices.
 

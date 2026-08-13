@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a reproducible problem using synthetic data only.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve LegacyGuard. Never include real personal, financial, medical, estate, document, or credential information.
+  - type: checkboxes
+    attributes:
+      label: Safety check
+      options:
+        - label: I used synthetic data and removed secrets and personal information.
+          required: true
+        - label: This is not an undisclosed security vulnerability.
+          required: true
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest safe example that reproduces the problem.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Version or commit
+      placeholder: v1.0.1 or commit SHA
+  - type: textarea
+    attributes:
+      label: Environment
+      description: Operating system, browser, and relevant runtime versions.
+  - type: textarea
+    attributes:
+      label: Additional context
+      description: Sanitized logs or screenshots only.
