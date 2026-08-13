@@ -1,0 +1,31 @@
+name: Documentation improvement
+description: Report missing, confusing, outdated, or inaccessible documentation.
+title: "[Docs]: "
+labels: ["documentation", "needs-triage"]
+body:
+  - type: input
+    attributes:
+      label: Page or section
+      placeholder: Link, filename, or heading
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What were you trying to understand or accomplish?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What was missing or confusing?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Suggested improvement
+  - type: checkboxes
+    attributes:
+      label: Safety check
+      options:
+        - label: My example uses only fictional or safely redacted information.
+          required: true
+

@@ -4,6 +4,11 @@ Thank you for helping build safer continuity tools for families. LegacyGuard
 welcomes focused contributions from developers, security reviewers, designers,
 documentation writers, accessibility specialists, and mission-aligned partners.
 
+The source license and contribution terms have not yet been selected. Until
+they are published, maintainers may discuss and review proposals but must not
+merge outside code or other copyrightable contributions. Do not begin
+substantial work without written confirmation that contribution intake is open.
+
 ## Before you begin
 
 - Never include real personal, financial, medical, estate, document, or
@@ -62,6 +67,6 @@ for documentation-only changes, but state exactly what you validated.
   impact are explained.
 - Write plain-language documentation for behavior users must understand.
 
-By contributing, you agree that your contribution will be provided under the
-repository's applicable license. If no license is displayed, ask the maintainer
-before making a substantial contribution.
+When contribution intake opens, every contribution will be governed by the
+published repository license and contribution terms. Public visibility alone
+does not grant reuse rights.
