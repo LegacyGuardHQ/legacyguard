@@ -5,9 +5,9 @@ import hashlib
 import os
 from dataclasses import dataclass
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
-from app.services.encryption import encryption_service
+from app.services.encryption import EncryptionOperationError, encryption_service
 
 DOCUMENT_CONTENT_ENCRYPTION_VERSION = "FERNET_DEK_V1"
 MAX_DEVELOPMENT_DOCUMENT_BYTES = 20 * 1024 * 1024
@@ -42,11 +42,21 @@ class DocumentContentEncryptionService:
         )
 
     def decrypt(self, document_id: str, encrypted_bytes: bytes, encrypted_key_reference: str) -> bytes:
-        key_material = encryption_service.decrypt(encrypted_key_reference)
-        version, key_document_id, encoded_key = key_material.split(":", 2)
+        try:
+            key_material = encryption_service.decrypt(encrypted_key_reference)
+        except EncryptionOperationError as exc:
+            raise DocumentContentEncryptionError("Document key reference could not be decrypted") from exc
+
+        parts = key_material.split(":", 2)
+        if len(parts) != 3:
+            raise DocumentContentEncryptionError("Document key reference is malformed")
+        version, key_document_id, encoded_key = parts
         if version != DOCUMENT_CONTENT_ENCRYPTION_VERSION or key_document_id != document_id:
             raise DocumentContentEncryptionError("Document key reference does not match document")
-        return Fernet(encoded_key.encode("utf-8")).decrypt(encrypted_bytes)
+        try:
+            return Fernet(encoded_key.encode("utf-8")).decrypt(encrypted_bytes)
+        except (InvalidToken, ValueError) as exc:
+            raise DocumentContentEncryptionError("Document content could not be decrypted") from exc
 
 
 document_content_encryption_service = DocumentContentEncryptionService()
