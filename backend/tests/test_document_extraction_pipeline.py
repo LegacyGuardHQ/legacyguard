@@ -1,7 +1,6 @@
 import os
 
 import pytest
-from cryptography.fernet import InvalidToken
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-123456")
@@ -10,6 +9,7 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.database.connection import Base, SessionLocal, engine
+from app.services.document_content_encryption import DocumentContentEncryptionError
 from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
     DISCOVERY_SCAN_STATUS_FAILED,
@@ -176,7 +176,7 @@ def test_decryption_and_unexpected_extraction_failures_are_not_unsupported() -> 
     try:
         document = db.query(Document).filter(Document.id == document_id).one()
 
-        with pytest.raises(InvalidToken) as decryption_error:
+        with pytest.raises(DocumentContentEncryptionError) as decryption_error:
             EncryptedDocumentTextProvider(storage=MemoryStorage(b"x" + encrypted_bytes[1:])).get_text(document)
         assert not isinstance(decryption_error.value, UnsupportedDocumentExtractionError)
 

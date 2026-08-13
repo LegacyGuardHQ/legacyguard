@@ -17,6 +17,7 @@ type AuthContextValue = {
   user: User | null;
   isAuthenticated: boolean;
   isInitializing: boolean;
+  sessionError: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   const resetSession = useCallback(() => {
     clearTokens();
@@ -41,8 +43,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setUser(await fetchCurrentUser());
-    } catch {
-      resetSession();
+      setSessionError(null);
+    } catch (error) {
+      if (error instanceof ApiError && !error.isAuthenticationError) {
+        setSessionError(error.message);
+      } else {
+        resetSession();
+      }
     } finally {
       setIsInitializing(false);
     }
@@ -63,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     saveTokens(tokens.access_token, tokens.refresh_token);
     try {
       setUser(await fetchCurrentUser());
+      setSessionError(null);
     } catch (error) {
       resetSession();
       throw error;
@@ -92,10 +100,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isAuthenticated: Boolean(user),
     isInitializing,
+    sessionError,
     login,
     register,
     logout,
-  }), [user, isInitializing, login, register, logout]);
+  }), [user, isInitializing, sessionError, login, register, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

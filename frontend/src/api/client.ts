@@ -6,12 +6,22 @@ const REFRESH_TOKEN_KEY = 'legacyguard.refresh_token';
 export class ApiError extends Error {
   status: number;
   detail?: string;
+  cause?: unknown;
 
-  constructor(message: string, status: number, detail?: string) {
+  constructor(message: string, status: number, detail?: string, cause?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.cause = cause;
+  }
+
+  get isNetworkError(): boolean {
+    return this.status === 0;
+  }
+
+  get isAuthenticationError(): boolean {
+    return this.status === 401;
   }
 }
 
@@ -31,6 +41,7 @@ export function clearTokens(): void {
 
 async function parseError(response: Response): Promise<ApiError> {
   let detail: string | undefined;
+  let parseFailure: unknown;
 
   try {
     const body = (await response.json()) as { detail?: unknown };
@@ -46,12 +57,12 @@ async function parseError(response: Response): Promise<ApiError> {
         })
         .join(' ');
     }
-  } catch {
-    // Keep the generic status-based message when the body is not JSON.
+  } catch (error) {
+    parseFailure = error;
   }
 
   const message = detail || `Request failed with status ${response.status}`;
-  return new ApiError(message, response.status, detail);
+  return new ApiError(message, response.status, detail, parseFailure);
 }
 
 export async function request<T>(path: string, options: RequestInit = {}, authenticated = false): Promise<T> {
@@ -75,8 +86,8 @@ export async function request<T>(path: string, options: RequestInit = {}, authen
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-  } catch {
-    throw new ApiError('Unable to reach the LegacyGuard backend.', 0);
+  } catch (error) {
+    throw new ApiError('Unable to reach the LegacyGuard backend.', 0, undefined, error);
   }
 
   if (response.status === 401 && authenticated) {
@@ -92,5 +103,9 @@ export async function request<T>(path: string, options: RequestInit = {}, authen
     return undefined as T;
   }
 
-  return (await response.json()) as T;
+  try {
+    return (await response.json()) as T;
+  } catch (error) {
+    throw new ApiError('The LegacyGuard backend returned an unreadable response.', response.status, undefined, error);
+  }
 }

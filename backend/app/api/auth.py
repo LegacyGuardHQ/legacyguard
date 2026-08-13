@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.session import UserSession
@@ -33,11 +34,15 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db), reque
         updated_at=datetime.now(timezone.utc),
         role="USER",
     )
-    settings = UserSecuritySettings(user_id=user.id, mfa_enabled=False, mfa_method=None, recovery_codes=None, security_preferences="{}")
+    security_settings = UserSecuritySettings(user_id=user.id, mfa_enabled=False, mfa_method=None, recovery_codes=None, security_preferences="{}")
     db.add(user)
-    db.add(settings)
+    db.add(security_settings)
     log_event(db=db, user_id=user.id, event_type="ACCOUNT_CREATED", details="User registered", request=request)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Email already registered") from exc
     db.refresh(user)
 
     return user

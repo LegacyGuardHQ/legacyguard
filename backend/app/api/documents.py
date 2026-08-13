@@ -267,7 +267,8 @@ async def upload_encrypted_document_content(
     except (DocumentValidationError, DocumentContentEncryptionError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Document upload validation failed") from exc
+        logger.exception("Unexpected document upload preparation failure", extra={"document_id": document.id})
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
 
     storage_reference: str | None = None
     try:
@@ -293,7 +294,7 @@ async def upload_encrypted_document_content(
             try:
                 document_storage.delete_permanently(document.id)
             except Exception:
-                pass
+                logger.exception("Failed to remove orphaned encrypted document content", extra={"document_id": document.id})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
 
     try:

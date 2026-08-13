@@ -9,7 +9,7 @@ type LoginLocationState = {
 };
 
 export default function LoginPage() {
-  const { isAuthenticated, isInitializing, login, register } = useAuth();
+  const { isAuthenticated, isInitializing, sessionError, login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const location = useLocation();
   usePageTitle(mode === 'login' ? 'Sign in' : 'Register');
@@ -30,6 +30,7 @@ export default function LoginPage() {
   return (
     <main className="auth-page">
       <div className="auth-intro">
+        {sessionError && <div className="error-message" role="alert">{sessionError}</div>}
         <p className="eyebrow">Privacy-first continuity planning</p>
         <h2>Organize what exists, what may exist, and what must happen next.</h2>
         <p>
