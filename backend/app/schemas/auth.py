@@ -38,7 +38,6 @@ class UserResponse(BaseModel):
     id: str
     email: str
     is_active: bool
-    password_hash: str
     created_at: datetime
     updated_at: datetime
     last_login: datetime | None = None
