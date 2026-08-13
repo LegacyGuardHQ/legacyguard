@@ -42,7 +42,7 @@ def test_user_registration_and_login() -> None:
     assert response.status_code == 201
     payload = response.json()
     assert payload["email"] == "user@example.com"
-    assert "password_hash" in payload
+    assert "password_hash" not in payload
 
     login_response = client.post(
         "/auth/login",
@@ -138,6 +138,17 @@ def test_password_hashing_is_not_plaintext() -> None:
         "/auth/register",
         json={"email": "user@example.com", "password": "StrongPass123!"},
     )
-    payload = response.json()
-    assert payload["password_hash"] != "StrongPass123!"
-    assert payload["password_hash"].startswith("$2b$")
+    assert response.status_code == 201
+    assert "password_hash" not in response.json()
+
+    from app.database.connection import SessionLocal
+    from app.models.user import User
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == "user@example.com").first()
+    finally:
+        db.close()
+    assert user is not None
+    assert user.password_hash != "StrongPass123!"
+    assert user.password_hash.startswith("$2b$")

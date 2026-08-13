@@ -33,9 +33,19 @@ def test_password_hashing_is_opaque() -> None:
         json={"email": "user@example.com", "password": "StrongPass123!"},
     )
     assert response.status_code == 201
-    payload = response.json()
-    assert payload["password_hash"] != "StrongPass123!"
-    assert payload["password_hash"].startswith("$2b$")
+    assert "password_hash" not in response.json()
+
+    from app.database.connection import SessionLocal
+    from app.models.user import User
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == "user@example.com").first()
+    finally:
+        db.close()
+    assert user is not None
+    assert user.password_hash != "StrongPass123!"
+    assert user.password_hash.startswith("$2b$")
 
 
 def test_token_expiration_and_revocation_flow() -> None:
