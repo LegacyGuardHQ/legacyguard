@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import os
 from datetime import datetime, timedelta, timezone
@@ -37,6 +38,7 @@ from app.models.discovery_scan_document import (
 )
 from app.models.document import Document
 from app.services.discovery_orchestrator import DISCOVERY_FAILED, DiscoveryOrchestrator
+from app.services.document_validation import DocumentValidationError, MAX_DOCUMENT_BYTES
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -285,6 +287,28 @@ def _upload_document(token: str, document_id: str, content: bytes = b"%PDF-1.4\n
         files={"file": (filename, content, mime_type)},
         data=data,
     )
+
+
+def test_upload_reader_enforces_limit_without_unbounded_read() -> None:
+    class OversizedUpload:
+        def __init__(self) -> None:
+            self.remaining = MAX_DOCUMENT_BYTES + 1
+            self.requested_sizes: list[int] = []
+
+        async def read(self, size: int) -> bytes:
+            self.requested_sizes.append(size)
+            returned = min(size, self.remaining)
+            self.remaining -= returned
+            return b"x" * returned
+
+    upload = OversizedUpload()
+
+    with pytest.raises(DocumentValidationError, match="Document exceeds maximum size"):
+        asyncio.run(documents_api._read_bounded_upload(upload))
+
+    assert upload.requested_sizes
+    assert max(upload.requested_sizes) == documents_api.UPLOAD_READ_CHUNK_BYTES
+    assert all(size > 0 for size in upload.requested_sizes)
 
 
 def test_owner_uploads_valid_pdf_and_response_is_private() -> None:
