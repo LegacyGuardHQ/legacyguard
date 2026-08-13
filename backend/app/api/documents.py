@@ -38,9 +38,15 @@ from app.services.document_validation import (
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
-document_storage = LocalDocumentStorage()
 malware_scanner: MalwareScanner | None = None
 UPLOAD_READ_CHUNK_BYTES = 64 * 1024
+
+
+def _build_document_storage() -> LocalDocumentStorage:
+    return LocalDocumentStorage(settings.document_storage_root or "private_storage/documents")
+
+
+document_storage = _build_document_storage()
 
 
 async def _read_bounded_upload(file: UploadFile) -> bytes:

@@ -8,6 +8,7 @@ from typing import Callable, Protocol
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETE,
     DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
@@ -105,7 +106,7 @@ class EncryptedDocumentTextProvider:
         storage: LocalDocumentStorage | None = None,
         extraction_service: DocumentExtractionService | None = None,
     ) -> None:
-        self.storage = storage or LocalDocumentStorage()
+        self.storage = storage or LocalDocumentStorage(settings.document_storage_root or "private_storage/documents")
         self.extraction_service = extraction_service or DocumentExtractionService()
 
     def get_text(self, document: Document) -> str:

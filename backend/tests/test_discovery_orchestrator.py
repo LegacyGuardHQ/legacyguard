@@ -48,6 +48,7 @@ from app.services.discovery_orchestrator import (
     DiscoveryOrchestrationError,
     DiscoveryOrchestrator,
     DiscoveryScanAlreadyClaimedError,
+    EncryptedDocumentTextProvider,
     UnsupportedDocumentExtractionError,
 )
 from app.services import discovery_orchestrator as discovery_orchestrator_module
@@ -174,6 +175,15 @@ def test_documents_api_builds_discovery_orchestrator_with_configured_stale_thres
     orchestrator = documents_api._build_discovery_orchestrator()
 
     assert orchestrator.stale_scan_threshold_seconds == 123
+
+
+def test_discovery_text_provider_uses_configured_storage_root(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    configured_root = tmp_path / "configured-discovery-storage"
+    monkeypatch.setattr(settings, "document_storage_root", str(configured_root))
+
+    provider = EncryptedDocumentTextProvider()
+
+    assert provider.storage.root == configured_root.resolve()
 
 
 def test_orchestrator_creates_discovery_scan() -> None:

@@ -289,6 +289,15 @@ def _upload_document(token: str, document_id: str, content: bytes = b"%PDF-1.4\n
     )
 
 
+def test_upload_storage_builder_uses_configured_root(monkeypatch, tmp_path) -> None:
+    configured_root = tmp_path / "configured-upload-storage"
+    monkeypatch.setattr(documents_api.settings, "document_storage_root", str(configured_root))
+
+    storage = documents_api._build_document_storage()
+
+    assert storage.root == configured_root.resolve()
+
+
 def test_upload_reader_enforces_limit_without_unbounded_read() -> None:
     class OversizedUpload:
         def __init__(self) -> None:
