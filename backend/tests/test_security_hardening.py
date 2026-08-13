@@ -10,6 +10,7 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.main import app
+from app.services.database_rate_limit import DatabaseLoginRateLimiter
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -85,6 +86,68 @@ def test_rate_limiting_blocks_repeated_failures() -> None:
         json={"email": "user@example.com", "password": "WrongPass123!"},
     )
     assert blocked.status_code == 429
+
+
+def test_successful_logins_do_not_consume_failure_allowance() -> None:
+    registered = client.post(
+        "/auth/register",
+        json={"email": "repeat-login@example.com", "password": "StrongPass123!"},
+    )
+    assert registered.status_code == 201
+
+    for _ in range(7):
+        response = client.post(
+            "/auth/login",
+            json={"email": "repeat-login@example.com", "password": "StrongPass123!"},
+        )
+        assert response.status_code == 200
+
+    from app.database.connection import SessionLocal
+    from app.models.login_rate_limit_attempt import LoginRateLimitAttempt
+
+    db = SessionLocal()
+    try:
+        assert db.query(LoginRateLimitAttempt).count() == 0
+    finally:
+        db.close()
+
+    for _ in range(5):
+        failed = client.post(
+            "/auth/login",
+            json={"email": "repeat-login@example.com", "password": "WrongPass123!"},
+        )
+        assert failed.status_code == 401
+
+    blocked = client.post(
+        "/auth/login",
+        json={"email": "repeat-login@example.com", "password": "WrongPass123!"},
+    )
+    assert blocked.status_code == 429
+
+
+def test_login_failure_allowance_is_shared_through_database() -> None:
+    from app.database.connection import SessionLocal
+    from app.models.login_rate_limit_attempt import LoginRateLimitAttempt
+
+    first_process = DatabaseLoginRateLimiter()
+    second_process = DatabaseLoginRateLimiter()
+    db = SessionLocal()
+    try:
+        for _ in range(5):
+            allowed, _retry_after = first_process.allow(db, "login:shared-client")
+            assert allowed is True
+            first_process.record_failure(db, "login:shared-client")
+            db.commit()
+
+        allowed, retry_after = second_process.allow(db, "login:shared-client")
+        stored_keys = [row.client_key_hash for row in db.query(LoginRateLimitAttempt).all()]
+    finally:
+        db.close()
+
+    assert allowed is False
+    assert retry_after > 0
+    assert stored_keys
+    assert all("shared-client" not in stored_key for stored_key in stored_keys)
 
 
 def test_registration_rate_limit_blocks_account_creation_bursts() -> None:

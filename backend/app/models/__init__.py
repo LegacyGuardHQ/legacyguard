@@ -8,6 +8,7 @@ from app.models.discovery import DiscoveryScan, EvidenceFinding
 from app.models.discovery_scan_document import DiscoveryScanDocument
 from app.models.discovery_asset_link import DiscoveryFindingAssetLink
 from app.models.document import Document
+from app.models.login_rate_limit_attempt import LoginRateLimitAttempt
 from app.models.report import Report
 from app.models.session import UserSession
 from app.models.task import Task
@@ -25,6 +26,7 @@ __all__ = [
     "DiscoveryScanDocument",
     "DiscoveryFindingAssetLink",
     "Document",
+    "LoginRateLimitAttempt",
     "EvidenceFinding",
     "Report",
     "UserSession",
