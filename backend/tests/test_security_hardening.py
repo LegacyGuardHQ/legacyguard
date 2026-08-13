@@ -87,6 +87,37 @@ def test_rate_limiting_blocks_repeated_failures() -> None:
     assert blocked.status_code == 429
 
 
+def test_registration_rate_limit_blocks_account_creation_bursts() -> None:
+    for index in range(5):
+        response = client.post(
+            "/auth/register",
+            json={"email": f"burst-{index}@example.com", "password": "StrongPass123!"},
+        )
+        assert response.status_code == 201
+
+    blocked = client.post(
+        "/auth/register",
+        json={"email": "burst-blocked@example.com", "password": "StrongPass123!"},
+    )
+
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == "Too many registration attempts"
+    assert int(blocked.headers["retry-after"]) > 0
+
+
+@pytest.mark.parametrize(
+    ("email", "password"),
+    [
+        (f"{'a' * 243}@example.com", "StrongPass123!"),
+        ("bounded@example.com", f"A1!{'a' * 126}"),
+    ],
+)
+def test_registration_rejects_oversized_credentials(email: str, password: str) -> None:
+    response = client.post("/auth/register", json={"email": email, "password": password})
+
+    assert response.status_code == 422
+
+
 def test_permission_checks_block_non_owner_access() -> None:
     first = client.post(
         "/auth/register",

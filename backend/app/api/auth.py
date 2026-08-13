@@ -21,6 +21,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(payload: RegisterRequest, db: Session = Depends(get_db), request: Request = None) -> User:
+    client_key = f"register:{request.client.host if request and request.client else 'unknown'}"
+    allowed, retry_after = rate_limiter.allow(client_key)
+    if not allowed:
+        operational_log_event("registration_failure", event_category="auth", severity="warning", reason="rate_limited")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registration attempts",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     existing = db.query(User).filter(User.email == str(payload.email).lower()).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -50,7 +60,7 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db), reque
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request = None) -> dict[str, str]:
-    client_key = request.client.host if request and request.client else "unknown"
+    client_key = f"login:{request.client.host if request and request.client else 'unknown'}"
     allowed, retry_after = rate_limiter.allow(client_key)
     if not allowed:
         log_event(db=db, user_id=None, event_type="LOGIN_FAILED", details="Rate limited", request=request)
