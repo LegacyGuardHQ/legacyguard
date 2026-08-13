@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from threading import BoundedSemaphore
 from typing import Callable, Protocol
 
 from sqlalchemy.orm import Session
@@ -46,6 +47,8 @@ EVIDENCE_FINDING_CREATED = "evidence_finding_created"
 DISCOVERY_DOCUMENT_FAILED = "discovery_document_failed"
 DISCOVERY_DOCUMENT_COMPLETED = "discovery_document_completed"
 DISCOVERY_DOCUMENT_SKIPPED = "discovery_document_skipped"
+DISCOVERY_SCAN_CONCURRENCY_LIMIT = 2
+_discovery_scan_slots = BoundedSemaphore(DISCOVERY_SCAN_CONCURRENCY_LIMIT)
 
 
 class DiscoveryOrchestrationError(RuntimeError):
@@ -65,7 +68,8 @@ class DiscoveryScanExecutor:
         self.orchestrator = orchestrator
 
     def process(self, db: Session, *, user_id: str, document_ids: list[str]) -> DiscoveryScan:
-        return self.orchestrator.run_scan(db, user_id=user_id, document_ids=document_ids)
+        with _discovery_scan_slots:
+            return self.orchestrator.run_scan(db, user_id=user_id, document_ids=document_ids)
 
     def create_pending(self, db: Session, *, user_id: str) -> DiscoveryScan:
         return self.orchestrator.create_scan(db, user_id=user_id)
@@ -78,12 +82,13 @@ class DiscoveryScanExecutor:
         user_id: str,
         document_ids: list[str],
     ) -> DiscoveryScan:
-        return self.orchestrator.process_scan(
-            db,
-            scan_id=scan_id,
-            user_id=user_id,
-            document_ids=document_ids,
-        )
+        with _discovery_scan_slots:
+            return self.orchestrator.process_scan(
+                db,
+                scan_id=scan_id,
+                user_id=user_id,
+                document_ids=document_ids,
+            )
 
     def mark_failed(self, db: Session, *, scan_id: str, user_id: str) -> DiscoveryScan | None:
         return self.orchestrator.mark_scan_failed(db, scan_id=scan_id, user_id=user_id)
