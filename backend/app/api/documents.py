@@ -26,6 +26,7 @@ from app.services.discovery_orchestrator import (
 )
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
 from app.services.document_storage import DocumentStorageError, LocalDocumentStorage
+from app.services.document_storage_config import get_default_document_storage_root
 from app.services.document_validation import (
     MAX_DOCUMENT_BYTES,
     DocumentValidationError,
@@ -43,7 +44,7 @@ UPLOAD_READ_CHUNK_BYTES = 64 * 1024
 
 
 def _build_document_storage() -> LocalDocumentStorage:
-    return LocalDocumentStorage(settings.document_storage_root or "private_storage/documents")
+    return LocalDocumentStorage(get_default_document_storage_root())
 
 
 document_storage = _build_document_storage()
