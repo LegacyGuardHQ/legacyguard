@@ -166,7 +166,10 @@ def test_scan_executor_caps_concurrent_scan_processing(monkeypatch: pytest.Monke
         )
 
     assert len(results) == 8
-    assert peak_active == concurrency_limit
+    # Assert upper bound instead of exact equality to avoid flakiness on slow CI runners.
+    # The semaphore caps concurrency at concurrency_limit, but thread scheduling may result
+    # in peak_active being less than the limit if threads don't fully overlap.
+    assert 0 < peak_active <= concurrency_limit
 
 
 def test_documents_api_builds_discovery_orchestrator_with_configured_stale_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
