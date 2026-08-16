@@ -107,7 +107,15 @@ def test_successful_logins_do_not_consume_failure_allowance() -> None:
 
     db = SessionLocal()
     try:
-        assert db.query(LoginRateLimitAttempt).count() == 0
+        # Scope the assertion to the specific client key used in this test to avoid
+        # interference from other tests that may persist LoginRateLimitAttempt rows.
+        client_key_hash = DatabaseLoginRateLimiter._hash_key("login:repeat-login@example.com")
+        assert (
+            db.query(LoginRateLimitAttempt)
+            .filter(LoginRateLimitAttempt.client_key_hash == client_key_hash)
+            .count()
+            == 0
+        )
     finally:
         db.close()
 
