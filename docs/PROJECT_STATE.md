@@ -3,7 +3,7 @@
 ## Repository
 
 - Remote: https://github.com/jh505tt-create/legacyguard.git
-- Current master: `04c4b44f08f7f6a2741f6f48733b7f4dd5af2995`
+- Current master: `b5c7f0888e1d5ff3e63e2480be07641a736367e1`
 - Development continues from a clean master branch with one milestone per feature branch and pull request.
 
 ## Purpose
@@ -43,6 +43,9 @@ LegacyGuard is a privacy-first financial asset discovery platform designed to he
 - Phase 5.3 — Discovery Lifecycle Telemetry and Safe Status Visibility
 - Phase 5.4 — Background Job Monitoring & Failure Surfacing
 - Phase 5.5 — API Contract Hardening
+- Frontend design tokens, design system docs, and component pattern library
+- Frontend Storybook setup (Tailwind config, Button/Card/Badge/Form stories)
+- Phase 1 UI Quick Wins (partial) — enhanced `DashboardStates` components (`LoadingState`, `EmptyState`, `ErrorState`, `SectionLoadingState`) and a new `SkeletonLoader` component
 
 Manual asset conversion remains explicitly user-initiated. Converted assets stay `NEEDS_REVIEW`; LegacyGuard does not automatically verify them.
 
@@ -66,9 +69,11 @@ Manual asset conversion remains explicitly user-initiated. Converted assets stay
 
 Completed: Phase 5.4 and Phase 5.5.
 
-Current milestone: Phase 5.6 — Extraction Reliability.
+Phase 5.6 — Extraction Reliability was previously the stated next milestone; the working tree has since diverged into frontend UI polish work (see `PHASE_1_IMPLEMENTATION_PLAN.md`) that landed directly on `master`. Reconcile with `git log` before resuming Phase 5.6.
 
-Phase 5.6 work in progress: extraction now treats empty or low-quality documents as completed-with-warnings, surfaces empty-document outcomes as explicit warning codes, and preserves clear semantics for unsupported or failed extraction paths. The review-queue experience also now exposes clearer status and filter guidance, including a summary of the current tab, any active category filter, and the total count of findings in the current view.
+Current milestone: Phase 1 — UI Quick Wins (loading, empty, and error state polish).
+
+Phase 1 status: `DashboardStates.tsx` and `SkeletonLoader.tsx` component logic is merged, but the CSS they depend on (`index.css` keyframes for fade/slide/shimmer/spin, and classes `.loading-spinner`, `.loading-spinner-inline`, `.skeleton-loader`, `.skeleton-element`, `.skeleton-line`, `.skeleton-circle`, `.skeleton-rect`, `.section-loading`) had not yet been added — those components render without their intended visuals until that CSS lands. `SkeletonLoader` is also not yet wired into any page. Remaining Phase 1 tasks (entrance animations, hover polish, per-page empty/error copy) are tracked in `PHASE_1_IMPLEMENTATION_PLAN.md`.
 
 ## Validation
 

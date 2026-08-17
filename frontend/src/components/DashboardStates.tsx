@@ -18,7 +18,7 @@ type LoadingStateProps = {
  */
 export function LoadingState({
   message = 'Securely loading your discovery activity.',
-  description = "We're preparing your private activity summary.",
+  description = "We’re preparing your private activity summary.",
   fullPage = true,
 }: LoadingStateProps) {
   return (
@@ -117,7 +117,7 @@ type ErrorStateProps = {
 export function ErrorState({
   onRetry,
   isRetrying,
-  title = "We couldn't load your discovery activity.",
+  title = "We couldn’t load your discovery activity.",
   message = 'Check your connection and try again. Your saved information has not been changed.',
   errorCode,
   supportLink,

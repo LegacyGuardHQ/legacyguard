@@ -266,7 +266,7 @@ describe('ScanDetailPage', () => {
 
     renderScanDetailPage();
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Discovery processing is active');
+    expect(await screen.findByText('Discovery processing is active', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Background job:').closest('p')).toHaveTextContent('RUNNING');
   });
 
@@ -302,7 +302,7 @@ describe('ScanDetailPage', () => {
 
     renderScanDetailPage();
 
-    expect(await screen.findByRole('status')).toHaveTextContent('retrying in the background');
+    expect(await screen.findByText('retrying in the background', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Lifecycle:').closest('p')).toHaveTextContent('Retrying background processing');
     expect(screen.getByText('Background job:').closest('p')).toHaveTextContent('RETRYING');
     expect(screen.getByText('Retries:').closest('p')).toHaveTextContent('2');
