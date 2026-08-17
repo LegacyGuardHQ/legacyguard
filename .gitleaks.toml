@@ -1,0 +1,16 @@
+title = "LegacyGuard Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic temporary secrets used only by the RC recovery verification tool"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = [
+  '''(^|/)scripts/rc1_recovery_verification\.py$'''
+]
+regexTarget = "line"
+regexes = [
+  '''(?i)(SECRET_KEY|JWT_SECRET).*(temp|temporary|test)'''
+]
