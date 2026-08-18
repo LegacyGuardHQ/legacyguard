@@ -1,6 +1,6 @@
 # Supporting LegacyGuard
 
-LegacyGuard is an open-source, privacy-first project intended to help families
+LegacyGuard is a privacy-first project intended to help families
 organize information they may one day need. The immediate goal is to fund
 independent security review, privacy and legal guidance, reliable hosting,
 accessibility work, and a carefully controlled pilot.
@@ -31,6 +31,9 @@ Initial funding priorities are:
 Financial support does not buy access to user data, weaken security review, or
 guarantee product influence. Funding terms, spending goals, and material
 conflicts should be documented publicly before funds are accepted.
+
+LegacyGuard is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0) — see [LICENSE](LICENSE).
 
 ## Safety
 
