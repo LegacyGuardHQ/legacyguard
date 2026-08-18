@@ -100,3 +100,5 @@ jobs:
           PYTHONPATH=. python -m alembic upgrade head
       - name: Run production smoke test
         run: python ../scripts/production_smoke_test.py
+
+# Recovery repository workflow registration
