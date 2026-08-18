@@ -41,3 +41,5 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+# Recovery repository workflow registration
