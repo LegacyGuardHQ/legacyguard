@@ -26,7 +26,9 @@ from app.services.discovery_orchestrator import (
 )
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
 from app.services.document_storage import DocumentStorageError, LocalDocumentStorage
+from app.services.document_storage_config import get_default_document_storage_root
 from app.services.document_validation import (
+    MAX_DOCUMENT_BYTES,
     DocumentValidationError,
     MalwareScanner,
     calculate_checksum_sha256,
@@ -37,8 +39,28 @@ from app.services.document_validation import (
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
-document_storage = LocalDocumentStorage()
 malware_scanner: MalwareScanner | None = None
+UPLOAD_READ_CHUNK_BYTES = 64 * 1024
+
+
+def _build_document_storage() -> LocalDocumentStorage:
+    return LocalDocumentStorage(get_default_document_storage_root())
+
+
+document_storage = _build_document_storage()
+
+
+async def _read_bounded_upload(file: UploadFile) -> bytes:
+    content = bytearray()
+    while True:
+        chunk = await file.read(UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > MAX_DOCUMENT_BYTES:
+            raise DocumentValidationError("Document exceeds maximum size")
+    validate_document_size(len(content))
+    return bytes(content)
 
 def _build_discovery_orchestrator() -> DiscoveryOrchestrator:
     return DiscoveryOrchestrator(stale_scan_threshold_seconds=settings.discovery_stale_scan_threshold_seconds)
@@ -257,8 +279,7 @@ async def upload_encrypted_document_content(
     _validate_document_upload_lifecycle(db, document, current_user.id)
 
     try:
-        content = await file.read()
-        validate_document_size(len(content))
+        content = await _read_bounded_upload(file)
         filename, _extension = validate_extension_and_mime(file.filename or "", file.content_type or "")
         validate_magic_bytes(content, file.content_type or "")
         if malware_scanner is not None:

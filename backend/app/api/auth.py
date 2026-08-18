@@ -13,6 +13,7 @@ from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserR
 from app.config import settings
 from app.security.auth import create_access_token, create_refresh_token, get_current_user, get_db, get_password_hash, verify_password
 from app.services.audit import log_event
+from app.services.database_rate_limit import database_login_rate_limiter
 from app.services.operational_logging import log_event as operational_log_event
 from app.services.rate_limit import rate_limiter
 
@@ -21,6 +22,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(payload: RegisterRequest, db: Session = Depends(get_db), request: Request = None) -> User:
+    client_key = f"register:{request.client.host if request and request.client else 'unknown'}"
+    allowed, retry_after = rate_limiter.allow(client_key)
+    if not allowed:
+        operational_log_event("registration_failure", event_category="auth", severity="warning", reason="rate_limited")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registration attempts",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     existing = db.query(User).filter(User.email == str(payload.email).lower()).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -50,8 +61,8 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db), reque
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request = None) -> dict[str, str]:
-    client_key = request.client.host if request and request.client else "unknown"
-    allowed, retry_after = rate_limiter.allow(client_key)
+    client_key = f"login:{request.client.host if request and request.client else 'unknown'}"
+    allowed, retry_after = database_login_rate_limiter.allow(db, client_key)
     if not allowed:
         log_event(db=db, user_id=None, event_type="LOGIN_FAILED", details="Rate limited", request=request)
         operational_log_event("auth_failure", event_category="auth", severity="warning", reason="rate_limited")
@@ -60,6 +71,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request
 
     user = db.query(User).filter(User.email == str(payload.email).lower()).first()
     if not user or not verify_password(payload.password, user.password_hash):
+        database_login_rate_limiter.record_failure(db, client_key)
         log_event(db=db, user_id=user.id if user else None, event_type="LOGIN_FAILED", details="Invalid credentials", request=request)
         operational_log_event("auth_failure", event_category="auth", severity="warning", reason="invalid_credentials")
         db.commit()

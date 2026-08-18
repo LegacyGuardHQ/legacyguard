@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
-    email: str
-    password: str = Field(..., min_length=12)
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=12, max_length=128)
 
     @field_validator("password")
     @classmethod

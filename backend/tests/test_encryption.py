@@ -42,5 +42,5 @@ def test_missing_production_encryption_key_fails_configuration() -> None:
 
 
 def test_default_development_encryption_key_is_rejected_in_production() -> None:
-    with pytest.raises(ValueError, match="production encryption_key must be explicitly configured"):
+    with pytest.raises(ValueError, match="encryption_key must be explicitly configured outside testing"):
         Settings(environment="production", encryption_key=DEV_ENCRYPTION_KEY)

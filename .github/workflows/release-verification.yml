@@ -90,7 +90,13 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Verify Alembic migration state
-        run: PYTHONPATH=. python -m alembic upgrade head
-
+        run: |
+          ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          JWT_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export ENCRYPTION_KEY
+          export SECRET_KEY
+          export JWT_SECRET
+          PYTHONPATH=. python -m alembic upgrade head
       - name: Run production smoke test
         run: python ../scripts/production_smoke_test.py

@@ -1,6 +1,9 @@
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from threading import BoundedSemaphore, Lock
 from unittest.mock import Mock
 
 import pytest
@@ -45,8 +48,10 @@ from app.services.discovery_orchestrator import (
     DiscoveryOrchestrationError,
     DiscoveryOrchestrator,
     DiscoveryScanAlreadyClaimedError,
+    EncryptedDocumentTextProvider,
     UnsupportedDocumentExtractionError,
 )
+from app.services import discovery_orchestrator as discovery_orchestrator_module
 
 
 @dataclass(frozen=True)
@@ -127,12 +132,61 @@ def _create_user_and_document(user_id: str = "user-1", document_id: str = "doc-1
         db.close()
 
 
+def test_scan_executor_caps_concurrent_scan_processing(monkeypatch: pytest.MonkeyPatch) -> None:
+    concurrency_limit = 2
+    monkeypatch.setattr(
+        discovery_orchestrator_module,
+        "_discovery_scan_slots",
+        BoundedSemaphore(concurrency_limit),
+    )
+    state_lock = Lock()
+    active = 0
+    peak_active = 0
+
+    class ObservedOrchestrator:
+        def run_scan(self, db, *, user_id: str, document_ids: list[str]):
+            nonlocal active, peak_active
+            with state_lock:
+                active += 1
+                peak_active = max(peak_active, active)
+            try:
+                time.sleep(0.03)
+                return user_id
+            finally:
+                with state_lock:
+                    active -= 1
+
+    executor = discovery_orchestrator_module.DiscoveryScanExecutor(ObservedOrchestrator())
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(
+            pool.map(
+                lambda index: executor.process(object(), user_id=f"user-{index}", document_ids=[]),
+                range(8),
+            )
+        )
+
+    assert len(results) == 8
+    # Assert upper bound instead of exact equality to avoid flakiness on slow CI runners.
+    # The semaphore caps concurrency at concurrency_limit, but thread scheduling may result
+    # in peak_active being less than the limit if threads don't fully overlap.
+    assert 0 < peak_active <= concurrency_limit
+
+
 def test_documents_api_builds_discovery_orchestrator_with_configured_stale_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "discovery_stale_scan_threshold_seconds", 123)
 
     orchestrator = documents_api._build_discovery_orchestrator()
 
     assert orchestrator.stale_scan_threshold_seconds == 123
+
+
+def test_discovery_text_provider_uses_configured_storage_root(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    configured_root = tmp_path / "configured-discovery-storage"
+    monkeypatch.setattr(settings, "document_storage_root", str(configured_root))
+
+    provider = EncryptedDocumentTextProvider()
+
+    assert provider.storage.root == configured_root.resolve()
 
 
 def test_orchestrator_creates_discovery_scan() -> None:

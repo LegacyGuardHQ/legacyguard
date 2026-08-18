@@ -30,29 +30,27 @@ class Settings(BaseSettings):
         normalized_environment = self.environment.lower()
         self.environment = normalized_environment
 
-        if normalized_environment == "production":
+        if normalized_environment != "testing":
             for field_name in ("secret_key", "encryption_key", "jwt_secret"):
                 value = getattr(self, field_name)
                 if not value:
                     raise ValueError(f"{field_name} is required")
+            if self.encryption_key == DEV_ENCRYPTION_KEY:
+                raise ValueError("encryption_key must be explicitly configured outside testing")
+            if self.secret_key in DEFAULT_DEV_SECRET_KEYS or len(self.secret_key) < MIN_SECRET_LENGTH:
+                raise ValueError("secret_key must be at least 24 characters and must not use a default value")
+            if self.jwt_secret in DEFAULT_DEV_JWT_SECRETS or len(self.jwt_secret) < MIN_SECRET_LENGTH:
+                raise ValueError("jwt_secret must be at least 24 characters and must not use a default value")
+
+        if normalized_environment == "production":
             if self.debug:
                 raise ValueError("debug must be false in production")
             if self.cors_origins and "*" in self.cors_origins:
                 raise ValueError("Wildcard CORS origins are not allowed")
-            if self.encryption_key == DEV_ENCRYPTION_KEY and self.secret_key != "short" and self.jwt_secret != "short":
-                raise ValueError("production encryption_key must be explicitly configured")
-            if self.secret_key in DEFAULT_DEV_SECRET_KEYS or len(self.secret_key) < MIN_SECRET_LENGTH:
-                raise ValueError("secret_key must be at least 24 characters")
-            if self.jwt_secret in DEFAULT_DEV_JWT_SECRETS or len(self.jwt_secret) < MIN_SECRET_LENGTH:
-                raise ValueError("jwt_secret must be at least 24 characters")
             if not self.cors_origins:
                 raise ValueError("cors_allowed_origins must be configured in production")
             if self.database_url.startswith("sqlite:///:memory:"):
                 raise ValueError("production database_url must not use an in-memory database")
-        elif normalized_environment != "testing":
-            for field_name in ("secret_key", "encryption_key", "jwt_secret"):
-                if not getattr(self, field_name):
-                    raise ValueError(f"{field_name} is required")
 
         if normalized_environment in {"production", "staging"}:
             if not re.search(r"[A-Za-z]", self.secret_key) or not re.search(r"\d", self.secret_key):
