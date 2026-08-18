@@ -32,9 +32,8 @@ Financial support does not buy access to user data, weaken security review, or
 guarantee product influence. Funding terms, spending goals, and material
 conflicts should be documented publicly before funds are accepted.
 
-The source license has not yet been selected. Public visibility or source
-availability must not be described as open source until an applicable license
-is published.
+LegacyGuard is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0) — see [LICENSE](LICENSE).
 
 ## Safety
 

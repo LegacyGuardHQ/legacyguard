@@ -4,10 +4,12 @@ Thank you for helping build safer continuity tools for families. LegacyGuard
 welcomes focused contributions from developers, security reviewers, designers,
 documentation writers, accessibility specialists, and mission-aligned partners.
 
-The source license and contribution terms have not yet been selected. Until
-they are published, maintainers may discuss and review proposals but must not
-merge outside code or other copyrightable contributions. Do not begin
-substantial work without written confirmation that contribution intake is open.
+LegacyGuard is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0) — see [LICENSE](LICENSE). Contribution terms have not yet been
+published. Until they are, maintainers may discuss and review proposals but
+must not merge outside code or other copyrightable contributions. Do not
+begin substantial work without written confirmation that contribution intake
+is open.
 
 ## Before you begin
 
@@ -68,5 +70,6 @@ for documentation-only changes, but state exactly what you validated.
 - Write plain-language documentation for behavior users must understand.
 
 When contribution intake opens, every contribution will be governed by the
-published repository license and contribution terms. Public visibility alone
-does not grant reuse rights.
+repository's AGPL-3.0 license (see [LICENSE](LICENSE)) and any additional
+contribution terms. Public visibility alone does not grant reuse rights
+beyond the license.

@@ -80,11 +80,11 @@ pytest
 
 ## Join the project
 
-LegacyGuard is preparing for public collaboration, but its source license has
-not yet been selected. The repository must not be described as open source or
-opened for outside code contributions until licensing and contribution terms
-are published. Security reviewers, designers, documentation writers, and
-mission-aligned partners can still help shape the readiness work safely.
+LegacyGuard is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0) — see [LICENSE](LICENSE). The repository is public, but outside
+code contributions are not yet open until contribution terms are published.
+Security reviewers, designers, documentation writers, and mission-aligned
+partners can still help shape the readiness work safely.
 
 - Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change.
 - Use the guided [issue templates](.github/ISSUE_TEMPLATE) for bugs, features,
