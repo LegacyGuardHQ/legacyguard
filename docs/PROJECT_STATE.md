@@ -2,8 +2,9 @@
 
 ## Repository
 
-- Remote: https://github.com/jh505tt-create/legacyguard.git
-- Current master: `b5c7f0888e1d5ff3e63e2480be07641a736367e1`
+- Original repository: `LegacyGuard/legacyguard` (deleted; GitHub Support is attempting restoration)
+- Temporary authoritative recovery repository: https://github.com/jh505tt-create/legacyguard-recovery
+- Current authoritative master: `92c10d7c35ba3fa149aa141e547b5f481a0b2c45`
 - Development continues from a clean master branch with one milestone per feature branch and pull request.
 
 ## Purpose
