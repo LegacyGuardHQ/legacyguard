@@ -1605,3 +1605,43 @@ input:focus {
     width: 100%;
   }
 }
+
+/* ASSET MANAGEMENT */
+.assets-page { display: grid; gap: var(--spacing-xl); }
+.asset-form, .asset-card {
+  padding: var(--spacing-2xl);
+  border: var(--border-width-thin) solid #223850;
+  border-radius: var(--radius-2xl);
+  background: rgba(11, 26, 44, 0.94);
+}
+.asset-form h2, .asset-card h2 { margin: 0; }
+.asset-form-grid, .asset-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-lg);
+  margin: var(--spacing-xl) 0;
+}
+.asset-form-grid label { display: grid; gap: var(--spacing-sm); color: #dce8f4; font-weight: var(--font-weight-bold); }
+.asset-form-grid label span { color: var(--color-neutral-400); font-size: var(--font-size-xs); font-weight: normal; }
+.asset-form-grid input, .asset-form-grid textarea {
+  width: 100%; border: var(--border-width-thin) solid #36516e; border-radius: var(--radius-lg);
+  background: rgba(7, 20, 34, 0.82); color: #f4f8fd; font: inherit; padding: var(--spacing-md) var(--spacing-lg);
+}
+.asset-form-grid input:focus-visible, .asset-form-grid textarea:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
+.asset-form-wide { grid-column: 1 / -1; }
+.asset-list { display: grid; gap: var(--spacing-lg); margin: 0; padding: 0; list-style: none; }
+.asset-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-lg); }
+.asset-card-heading h2 { margin-top: var(--spacing-md); }
+.asset-verification { border: var(--border-width-thin) solid currentColor; border-radius: var(--radius-full); padding: var(--spacing-sm) var(--spacing-md); color: var(--color-status-pending); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
+.verification-verified { color: var(--color-status-complete); }
+.verification-closed { color: var(--color-neutral-400); }
+.asset-summary { margin-bottom: 0; }
+.asset-summary dt { color: var(--color-neutral-400); font-size: var(--font-size-sm); }
+.asset-summary dd { margin: var(--spacing-sm) 0 0; color: #f4f8fd; overflow-wrap: anywhere; }
+.asset-card > p { color: var(--color-neutral-300); line-height: var(--line-height-relaxed); }
+
+@media (max-width: 680px) {
+  .asset-form-grid, .asset-summary { grid-template-columns: 1fr; }
+  .asset-form-wide { grid-column: auto; }
+  .asset-card-heading { flex-direction: column; }
+}

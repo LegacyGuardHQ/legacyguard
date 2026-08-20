@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import HealthStatus from './HealthStatus';
 
 const navigation = [
+  ['/assets', 'Assets'],
   ['/discovery', 'Overview'],
   ['/discovery/scans', 'Scan history'],
   ['/discovery/review', 'Needs review'],
@@ -41,7 +42,7 @@ export default function AppShell() {
         </div>
       </header>
 
-      <nav className="app-nav" aria-label="Discovery navigation">
+      <nav className="app-nav" aria-label="Workspace navigation">
         {navigation.map(([to, label]) => (
           <NavLink
             key={to}
