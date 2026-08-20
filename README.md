@@ -81,8 +81,11 @@ pytest
 ## Join the project
 
 LegacyGuard is licensed under the GNU Affero General Public License v3.0
-(AGPL-3.0) — see [LICENSE](LICENSE). The repository is public, but outside
-code contributions are not yet open until contribution terms are published.
+(AGPL-3.0) — see [LICENSE](LICENSE). This repository is currently a private
+disaster-recovery copy while GitHub Support attempts to restore the original
+LegacyGuard organization and repository; its canonical location and visibility
+may change after the restoration outcome is known. Outside code contributions
+are not yet open until contribution terms are published.
 Security reviewers, designers, documentation writers, and mission-aligned
 partners can still help shape the readiness work safely.
 
