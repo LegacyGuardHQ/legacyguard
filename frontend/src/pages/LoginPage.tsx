@@ -24,7 +24,7 @@ export default function LoginPage() {
 
   if (isAuthenticated) {
     const state = location.state as LoginLocationState | null;
-    return <Navigate to={state?.from?.pathname || '/discovery'} replace />;
+    return <Navigate to={state?.from?.pathname || '/workspace'} replace />;
   }
 
   return (

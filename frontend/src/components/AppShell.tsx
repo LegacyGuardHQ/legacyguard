@@ -5,12 +5,13 @@ import { useAuth } from '../context/AuthContext';
 import HealthStatus from './HealthStatus';
 
 const navigation = [
+  ['/workspace', 'Home'],
   ['/assets', 'Assets'],
   ['/beneficiaries', 'Beneficiaries'],
   ['/documents', 'Document Vault'],
-  ['/discovery', 'Overview'],
-  ['/discovery/scans', 'Scan history'],
-  ['/discovery/review', 'Needs review'],
+  ['/discovery', 'Discovery'],
+  ['/discovery/scans', 'Scans'],
+  ['/discovery/review', 'Review queue'],
 ] as const;
 
 export default function AppShell() {
@@ -49,7 +50,7 @@ export default function AppShell() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/discovery'}
+            end={to === '/workspace' || to === '/discovery'}
             className={({ isActive }) => `nav-link${isActive ? ' nav-link-active' : ''}`}
           >
             {label}
