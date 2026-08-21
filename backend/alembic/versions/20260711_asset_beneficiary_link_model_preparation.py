@@ -19,10 +19,15 @@ def upgrade() -> None:
     with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
         batch_op.add_column(sa.Column("priority_order_int", sa.Integer(), nullable=True))
 
+    numeric_predicate = (
+        "priority_order GLOB '[0-9]*'"
+        if op.get_bind().dialect.name == "sqlite"
+        else "priority_order ~ '^[0-9]+$'"
+    )
     op.execute(
         "UPDATE asset_beneficiaries "
         "SET priority_order_int = CAST(priority_order AS INTEGER) "
-        "WHERE priority_order IS NOT NULL AND priority_order GLOB '[0-9]*'"
+        f"WHERE priority_order IS NOT NULL AND {numeric_predicate}"
     )
 
     with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
