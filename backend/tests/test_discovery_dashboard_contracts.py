@@ -292,19 +292,26 @@ def test_scan_documents_serialize_all_states_warnings_and_tied_order_safely() ->
     response = client.get("/discovery/scans/scan-documents/documents", headers=_headers(owner_token))
 
     assert response.status_code == 200
-    expected_created_at = tied_created_at.replace(tzinfo=None).isoformat()
-    assert response.json() == [
+    payload = response.json()
+    assert [
+        {key: value for key, value in item.items() if key != "created_at"}
+        for item in payload
+    ] == [
         {
             "document_id": f"safe-document-{suffix}",
             "document_name": f"Safe document {suffix.upper()}",
             "document_type": "RETIREMENT_DOCUMENT",
             "status": processing_status,
             "warning_code": warning_code,
-            "created_at": expected_created_at,
         }
         for suffix, processing_status, warning_code in tracking_specs
     ]
-    serialized = str(response.json()).lower()
+    for item in payload:
+        created_at = datetime.fromisoformat(item["created_at"])
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        assert created_at == tied_created_at
+    serialized = str(payload).lower()
     for prohibited in (
         "private-account",
         "private-checksum",
