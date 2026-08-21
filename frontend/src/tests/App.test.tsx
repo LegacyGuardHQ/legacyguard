@@ -49,4 +49,10 @@ describe('routing foundation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
   });
+
+  it('protects the document-vault route with the existing authentication gate', async () => {
+    renderApp('/documents');
+
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+  });
 });

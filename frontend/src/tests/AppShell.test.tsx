@@ -26,5 +26,6 @@ describe('AppShell navigation', () => {
 
     expect(screen.getByRole('navigation', { name: 'Workspace navigation' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Beneficiaries' })).toHaveAttribute('href', '/beneficiaries');
+    expect(screen.getByRole('link', { name: 'Document Vault' })).toHaveAttribute('href', '/documents');
   });
 });
