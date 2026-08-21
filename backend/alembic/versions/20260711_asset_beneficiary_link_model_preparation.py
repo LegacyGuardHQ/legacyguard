@@ -16,7 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
+    with op.batch_alter_table("asset_beneficiaries") as batch_op:
         batch_op.add_column(sa.Column("priority_order_int", sa.Integer(), nullable=True))
 
     numeric_predicate = (
@@ -30,7 +30,7 @@ def upgrade() -> None:
         f"WHERE priority_order IS NOT NULL AND {numeric_predicate}"
     )
 
-    with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
+    with op.batch_alter_table("asset_beneficiaries") as batch_op:
         batch_op.drop_column("priority_order")
         batch_op.alter_column("priority_order_int", new_column_name="priority_order")
         batch_op.add_column(sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()))
@@ -39,7 +39,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
+    with op.batch_alter_table("asset_beneficiaries") as batch_op:
         batch_op.drop_column("deactivation_reason_encrypted")
         batch_op.drop_column("deactivated_at")
         batch_op.drop_column("is_active")
@@ -51,6 +51,6 @@ def downgrade() -> None:
         "WHERE priority_order IS NOT NULL"
     )
 
-    with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
+    with op.batch_alter_table("asset_beneficiaries") as batch_op:
         batch_op.drop_column("priority_order")
         batch_op.alter_column("priority_order_text", new_column_name="priority_order")

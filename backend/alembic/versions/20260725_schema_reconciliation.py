@@ -57,12 +57,12 @@ def upgrade() -> None:
         unique=False,
     )
 
-    with op.batch_alter_table("beneficiaries", recreate="always") as batch_op:
+    with op.batch_alter_table("beneficiaries") as batch_op:
         batch_op.alter_column("relationship", new_column_name="relationship_type")
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("beneficiaries", recreate="always") as batch_op:
+    with op.batch_alter_table("beneficiaries") as batch_op:
         batch_op.alter_column("relationship_type", new_column_name="relationship")
 
     op.drop_index(
