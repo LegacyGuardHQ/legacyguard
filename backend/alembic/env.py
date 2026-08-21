@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -7,6 +8,13 @@ from app.database.connection import Base
 from app.models import *  # noqa: F401,F403
 
 config = context.config
+
+database_url = os.environ.get("DATABASE_URL")
+if database_url and not config.attributes.get("database_url_explicit"):
+    # ConfigParser treats percent signs as interpolation markers. Escaping them
+    # here preserves percent-encoded credentials in database URLs.
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

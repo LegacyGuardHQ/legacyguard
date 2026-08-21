@@ -62,6 +62,10 @@ cd backend
 alembic upgrade head
 ```
 
+The Alembic CLI reads `DATABASE_URL` from the deployment environment. Confirm
+that it identifies the intended database before running the command; never
+substitute a production URL in local smoke or migration tests.
+
 5. Start the backend.
 6. Verify /health/live.
 7. Verify /health/ready.

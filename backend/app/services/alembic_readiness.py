@@ -17,6 +17,7 @@ def _alembic_config(database_url: str | None = None) -> Config:
     config.set_main_option("script_location", str(backend_root / "alembic"))
     if database_url is not None:
         config.set_main_option("sqlalchemy.url", database_url)
+        config.attributes["database_url_explicit"] = True
     return config
 
 
