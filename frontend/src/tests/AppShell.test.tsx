@@ -13,7 +13,7 @@ vi.mock('../components/HealthStatus', () => ({
 }));
 
 describe('AppShell navigation', () => {
-  it('provides a keyboard-accessible beneficiary navigation link', () => {
+  it('provides consistent workspace navigation and identifies the active page', () => {
     render(
       <MemoryRouter initialEntries={['/assets']}>
         <Routes>
@@ -25,7 +25,12 @@ describe('AppShell navigation', () => {
     );
 
     expect(screen.getByRole('navigation', { name: 'Workspace navigation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/workspace');
     expect(screen.getByRole('link', { name: 'Beneficiaries' })).toHaveAttribute('href', '/beneficiaries');
     expect(screen.getByRole('link', { name: 'Document Vault' })).toHaveAttribute('href', '/documents');
+    expect(screen.getByRole('link', { name: 'Discovery' })).toHaveAttribute('href', '/discovery');
+    expect(screen.getByRole('link', { name: 'Scans' })).toHaveAttribute('href', '/discovery/scans');
+    expect(screen.getByRole('link', { name: 'Review queue' })).toHaveAttribute('href', '/discovery/review');
+    expect(screen.getByRole('link', { name: 'Assets' })).toHaveAttribute('aria-current', 'page');
   });
 });

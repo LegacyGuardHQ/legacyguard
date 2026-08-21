@@ -12,6 +12,7 @@ import LoginPage from './LoginPage';
 import ReviewQueuePage from './ReviewQueuePage';
 import ScanDetailPage from './ScanDetailPage';
 import ScanHistoryPage from './ScanHistoryPage';
+import WorkspaceDashboardPage from './WorkspaceDashboardPage';
 
 function HomeRedirect() {
   const { isAuthenticated, isInitializing } = useAuth();
@@ -24,7 +25,7 @@ function HomeRedirect() {
     );
   }
 
-  return <Navigate to={isAuthenticated ? '/discovery' : '/login'} replace />;
+  return <Navigate to={isAuthenticated ? '/workspace' : '/login'} replace />;
 }
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
+          <Route path="/workspace" element={<WorkspaceDashboardPage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/beneficiaries" element={<BeneficiariesPage />} />
           <Route path="/documents" element={<DocumentsPage />} />
