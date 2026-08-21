@@ -73,6 +73,7 @@ def _seed_scan_with_findings(
                 created_at=datetime.now(timezone.utc),
             )
         )
+        db.flush()
         for index, review_status in enumerate(statuses):
             document_id = f"{scan_id}-doc-{index}"
             db.add(
@@ -84,6 +85,7 @@ def _seed_scan_with_findings(
                     mime_type="text/plain",
                 )
             )
+            db.flush()
             finding = EvidenceFinding(
                 id=f"{scan_id}-finding-{index}",
                 scan_id=scan_id,

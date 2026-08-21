@@ -15,6 +15,7 @@ from app.database.connection import SessionLocal
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.discovery import EVIDENCE_REVIEW_STATUS_CONFIRMED, EVIDENCE_REVIEW_STATUS_DISMISSED, EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, DiscoveryScan, EvidenceFinding
+from app.models.document import Document
 from app.services.rate_limit import rate_limiter
 from app.services.audit import log_event as add_audit_event
 
@@ -49,6 +50,14 @@ def _create_finding(user_id: str, finding_id: str = "finding-1") -> str:
     db = SessionLocal()
     try:
         scan = DiscoveryScan(id=f"scan-{finding_id}", user_id=user_id, status="COMPLETE", documents_processed=1, created_at=datetime.now(timezone.utc))
+        document = Document(
+            id="doc-1",
+            user_id=user_id,
+            document_type="ACCOUNT_STATEMENT",
+            document_name="Discovery source",
+        )
+        db.add_all([scan, document])
+        db.flush()
         finding = EvidenceFinding(
             id=finding_id,
             scan_id=scan.id,
@@ -59,7 +68,6 @@ def _create_finding(user_id: str, finding_id: str = "finding-1") -> str:
         )
         finding.set_matched_terms('["retirement"]')
         finding.set_evidence_excerpt("Sensitive excerpt")
-        db.add(scan)
         db.add(finding)
         db.commit()
         return finding.id

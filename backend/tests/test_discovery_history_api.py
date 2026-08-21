@@ -13,6 +13,7 @@ os.environ.setdefault("ENVIRONMENT", "testing")
 from app.database.connection import SessionLocal
 from app.main import app
 from app.models.discovery import EVIDENCE_REVIEW_STATUS_CONFIRMED, EVIDENCE_REVIEW_STATUS_DISMISSED, EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, DiscoveryScan, EvidenceFinding
+from app.models.document import Document
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -54,7 +55,18 @@ def _seed_scan(user_id: str, scan_id: str, created_at: datetime | None = None) -
 def _seed_finding(scan_id: str, finding_id: str, category: str, review_status: str) -> None:
     db = SessionLocal()
     try:
-        finding = EvidenceFinding(id=finding_id, scan_id=scan_id, document_id=f"doc-{finding_id}", category=category, confidence_score=85, review_status=review_status)
+        scan = db.query(DiscoveryScan).filter(DiscoveryScan.id == scan_id).one()
+        document_id = f"doc-{finding_id}"
+        db.add(
+            Document(
+                id=document_id,
+                user_id=scan.user_id,
+                document_type="ACCOUNT_STATEMENT",
+                document_name="Discovery source",
+            )
+        )
+        db.flush()
+        finding = EvidenceFinding(id=finding_id, scan_id=scan_id, document_id=document_id, category=category, confidence_score=85, review_status=review_status)
         finding.set_matched_terms('["secret-term"]')
         finding.set_evidence_excerpt("Sensitive raw evidence")
         db.add(finding)
