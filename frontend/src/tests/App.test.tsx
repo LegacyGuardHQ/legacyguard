@@ -43,4 +43,10 @@ describe('routing foundation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
   });
+
+  it('protects the beneficiary-management route with the existing authentication gate', async () => {
+    renderApp('/beneficiaries');
+
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+  });
 });

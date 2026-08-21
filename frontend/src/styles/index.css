@@ -1600,6 +1600,43 @@ input:focus {
   }
 }
 
+/* BENEFICIARY MANAGEMENT */
+.beneficiaries-page { display: grid; gap: var(--spacing-xl); }
+.beneficiary-form, .beneficiary-card {
+  padding: var(--spacing-2xl);
+  border: var(--border-width-thin) solid #223850;
+  border-radius: var(--radius-2xl);
+  background: rgba(11, 26, 44, 0.94);
+}
+.beneficiary-form h2, .beneficiary-card h2 { margin: 0; }
+.beneficiary-form-grid, .beneficiary-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-lg);
+  margin: var(--spacing-xl) 0;
+}
+.beneficiary-form-grid label { display: grid; gap: var(--spacing-sm); color: #dce8f4; font-weight: var(--font-weight-bold); }
+.beneficiary-form-grid label span { color: var(--color-neutral-400); font-size: var(--font-size-xs); font-weight: normal; }
+.beneficiary-form-grid input {
+  width: 100%; border: var(--border-width-thin) solid #36516e; border-radius: var(--radius-lg);
+  background: rgba(7, 20, 34, 0.82); color: #f4f8fd; font: inherit; padding: var(--spacing-md) var(--spacing-lg);
+}
+.beneficiary-form-grid input:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
+.beneficiary-success { border: var(--border-width-thin) solid var(--color-success-border); border-radius: var(--radius-lg); background: var(--color-success-bg); color: var(--color-success-text); padding: var(--spacing-lg); }
+.beneficiary-list { display: grid; gap: var(--spacing-lg); margin: 0; padding: 0; list-style: none; }
+.beneficiary-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-lg); }
+.beneficiary-card-heading h2 { margin-top: var(--spacing-md); }
+.beneficiary-verification { border: var(--border-width-thin) solid currentColor; border-radius: var(--radius-full); padding: var(--spacing-sm) var(--spacing-md); color: var(--color-status-pending); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
+.verification-outdated { color: var(--color-status-error); }
+.beneficiary-summary { margin-bottom: 0; }
+.beneficiary-summary dt { color: var(--color-neutral-400); font-size: var(--font-size-sm); }
+.beneficiary-summary dd { margin: var(--spacing-sm) 0 0; color: #f4f8fd; overflow-wrap: anywhere; }
+
+@media (max-width: 680px) {
+  .beneficiary-form-grid, .beneficiary-summary { grid-template-columns: 1fr; }
+  .beneficiary-card-heading { flex-direction: column; }
+}
+
 @media (max-width: 640px) {
   .category-filter {
     width: 100%;

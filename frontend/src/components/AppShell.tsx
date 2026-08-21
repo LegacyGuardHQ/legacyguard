@@ -6,6 +6,7 @@ import HealthStatus from './HealthStatus';
 
 const navigation = [
   ['/assets', 'Assets'],
+  ['/beneficiaries', 'Beneficiaries'],
   ['/discovery', 'Overview'],
   ['/discovery/scans', 'Scan history'],
   ['/discovery/review', 'Needs review'],
