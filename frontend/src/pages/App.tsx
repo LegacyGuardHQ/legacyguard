@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import AssetsPage from './AssetsPage';
+import BeneficiariesPage from './BeneficiariesPage';
 import ProtectedRoute from '../components/ProtectedRoute';
 import { useAuth } from '../context/AuthContext';
 import DiscoveryOverviewPage from './DiscoveryOverviewPage';
@@ -33,6 +34,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route path="/assets" element={<AssetsPage />} />
+          <Route path="/beneficiaries" element={<BeneficiariesPage />} />
           <Route path="/discovery" element={<DiscoveryOverviewPage />} />
           <Route path="/discovery/scans" element={<ScanHistoryPage />} />
           <Route path="/discovery/scans/:scanId" element={<ScanDetailPage />} />
