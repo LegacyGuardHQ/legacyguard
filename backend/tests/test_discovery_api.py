@@ -97,6 +97,14 @@ def test_findings_endpoint_hides_sensitive_fields() -> None:
     db = SessionLocal()
     try:
         scan = DiscoveryScan(id="scan-findings", user_id=user_id, status="COMPLETE", documents_processed=1, created_at=datetime.now(timezone.utc))
+        document = Document(
+            id="doc-1",
+            user_id=user_id,
+            document_type="ACCOUNT_STATEMENT",
+            document_name="Discovery source",
+        )
+        db.add_all([scan, document])
+        db.flush()
         finding = EvidenceFinding(
             id="finding-1",
             scan_id=scan.id,
@@ -107,7 +115,6 @@ def test_findings_endpoint_hides_sensitive_fields() -> None:
         )
         finding.set_matched_terms('["retirement"]')
         finding.set_evidence_excerpt("Sensitive excerpt")
-        db.add(scan)
         db.add(finding)
         db.commit()
     finally:
@@ -282,6 +289,14 @@ def test_safe_report_endpoint_returns_only_summary_fields() -> None:
             created_at=datetime.now(timezone.utc),
             completed_at=datetime.now(timezone.utc),
         )
+        document = Document(
+            id="doc-report",
+            user_id=user_id,
+            document_type="ACCOUNT_STATEMENT",
+            document_name="Discovery source",
+        )
+        db.add_all([scan, document])
+        db.flush()
         finding = EvidenceFinding(
             id="finding-report",
             scan_id=scan.id,
@@ -292,7 +307,7 @@ def test_safe_report_endpoint_returns_only_summary_fields() -> None:
         )
         finding.set_matched_terms('["private-term"]')
         finding.set_evidence_excerpt("Highly sensitive evidence")
-        db.add_all([scan, finding])
+        db.add(finding)
         db.commit()
     finally:
         db.close()

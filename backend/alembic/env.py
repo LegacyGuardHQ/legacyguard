@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.database.connection import Base
+from app.database.url import normalize_database_url
 from app.models import *  # noqa: F401,F403
 
 config = context.config
@@ -13,7 +14,8 @@ database_url = os.environ.get("DATABASE_URL")
 if database_url and not config.attributes.get("database_url_explicit"):
     # ConfigParser treats percent signs as interpolation markers. Escaping them
     # here preserves percent-encoded credentials in database URLs.
-    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+    normalized_database_url = normalize_database_url(database_url)
+    config.set_main_option("sqlalchemy.url", normalized_database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

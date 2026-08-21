@@ -41,7 +41,7 @@ def upgrade() -> None:
     )
 
     # SQLite requires table recreation for new table-level constraints.
-    with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
+    with op.batch_alter_table("asset_beneficiaries") as batch_op:
         batch_op.create_unique_constraint(
             "uq_asset_beneficiary_asset_beneficiary",
             ["asset_id", "beneficiary_id"],
@@ -53,7 +53,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("asset_beneficiaries", recreate="always") as batch_op:
+    with op.batch_alter_table("asset_beneficiaries") as batch_op:
         batch_op.drop_constraint("ck_asset_beneficiary_percentage_range", type_="check")
         batch_op.drop_constraint("uq_asset_beneficiary_asset_beneficiary", type_="unique")
 

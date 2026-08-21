@@ -16,7 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("documents", recreate="always") as batch_op:
+    with op.batch_alter_table("documents") as batch_op:
         batch_op.add_column(sa.Column("beneficiary_id", sa.String(), nullable=True))
         batch_op.add_column(sa.Column("description_encrypted", sa.Text(), nullable=True))
         batch_op.add_column(sa.Column("original_filename", sa.String(), nullable=True))
@@ -57,7 +57,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("documents", recreate="always") as batch_op:
+    with op.batch_alter_table("documents") as batch_op:
         batch_op.drop_constraint("fk_documents_replaced_by_document_id_documents", type_="foreignkey")
         batch_op.drop_constraint("fk_documents_beneficiary_id_beneficiaries", type_="foreignkey")
         batch_op.drop_index(op.f("ix_documents_verification_status"))

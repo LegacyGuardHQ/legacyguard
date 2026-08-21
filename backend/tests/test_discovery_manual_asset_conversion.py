@@ -23,6 +23,7 @@ from app.models.discovery import (
     DiscoveryScan,
     EvidenceFinding,
 )
+from app.models.document import Document
 from app.services.rate_limit import rate_limiter
 from app.services.audit import log_event as add_audit_event
 
@@ -63,6 +64,14 @@ def _create_finding(user_id: str, *, finding_id: str, review_status: str) -> str
             documents_processed=1,
             created_at=datetime.now(timezone.utc),
         )
+        document = Document(
+            id=f"doc-{finding_id}",
+            user_id=user_id,
+            document_type="ACCOUNT_STATEMENT",
+            document_name="Discovery source",
+        )
+        db.add_all([scan, document])
+        db.flush()
         finding = EvidenceFinding(
             id=finding_id,
             scan_id=scan.id,
@@ -73,7 +82,7 @@ def _create_finding(user_id: str, *, finding_id: str, review_status: str) -> str
         )
         finding.set_matched_terms('["401(k)", "account 9876"]')
         finding.set_evidence_excerpt("Sensitive retirement evidence excerpt")
-        db.add_all([scan, finding])
+        db.add(finding)
         db.commit()
         return finding.id
     finally:

@@ -93,3 +93,13 @@ def test_testing_environment_keeps_isolated_test_defaults() -> None:
 
     assert configured.environment == "testing"
     assert configured.encryption_key == DEV_ENCRYPTION_KEY
+
+
+def test_database_pool_settings_reject_invalid_limits() -> None:
+    with patch.dict(
+        os.environ,
+        {"ENVIRONMENT": "testing", "DATABASE_POOL_SIZE": "0"},
+        clear=True,
+    ):
+        with pytest.raises(ValueError, match="database_pool_size"):
+            Settings()

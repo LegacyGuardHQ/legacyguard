@@ -144,6 +144,7 @@ def test_dashboard_is_owner_scoped_and_aggregates_every_status_deterministically
                     created_at=tied_created_at,
                 )
             )
+        db.flush()
 
         for index, (category, review_status) in enumerate(finding_specs):
             document = Document(
@@ -164,7 +165,9 @@ def test_dashboard_is_owner_scoped_and_aggregates_every_status_deterministically
             )
             finding.set_matched_terms('["private matched term"]')
             finding.set_evidence_excerpt("private evidence excerpt")
-            db.add_all([document, finding])
+            db.add(document)
+            db.flush()
+            db.add(finding)
 
         other_scan = DiscoveryScan(
             id="other-scan-z",
@@ -179,19 +182,17 @@ def test_dashboard_is_owner_scoped_and_aggregates_every_status_deterministically
             document_type="TAX_DOCUMENT",
             document_name="Other private document",
         )
-        db.add_all(
-            [
-                other_scan,
-                other_document,
-                EvidenceFinding(
+        db.add_all([other_scan, other_document])
+        db.flush()
+        db.add(
+            EvidenceFinding(
                     id="other-finding",
                     scan_id=other_scan.id,
                     document_id=other_document.id,
                     category="OTHER_PRIVATE_CATEGORY",
                     confidence_score=99,
                     review_status=EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
-                ),
-            ]
+            )
         )
         db.commit()
     finally:
@@ -260,6 +261,7 @@ def test_scan_documents_serialize_all_states_warnings_and_tied_order_safely() ->
             created_at=tied_created_at,
         )
         db.add(scan)
+        db.flush()
         for suffix, processing_status, warning_code in tracking_specs:
             document = Document(
                 id=f"safe-document-{suffix}",
@@ -280,7 +282,9 @@ def test_scan_documents_serialize_all_states_warnings_and_tied_order_safely() ->
                 warning_code=warning_code,
                 created_at=tied_created_at,
             )
-            db.add_all([document, tracking])
+            db.add(document)
+            db.flush()
+            db.add(tracking)
         db.commit()
     finally:
         db.close()
@@ -288,19 +292,26 @@ def test_scan_documents_serialize_all_states_warnings_and_tied_order_safely() ->
     response = client.get("/discovery/scans/scan-documents/documents", headers=_headers(owner_token))
 
     assert response.status_code == 200
-    expected_created_at = tied_created_at.replace(tzinfo=None).isoformat()
-    assert response.json() == [
+    payload = response.json()
+    assert [
+        {key: value for key, value in item.items() if key != "created_at"}
+        for item in payload
+    ] == [
         {
             "document_id": f"safe-document-{suffix}",
             "document_name": f"Safe document {suffix.upper()}",
             "document_type": "RETIREMENT_DOCUMENT",
             "status": processing_status,
             "warning_code": warning_code,
-            "created_at": expected_created_at,
         }
         for suffix, processing_status, warning_code in tracking_specs
     ]
-    serialized = str(response.json()).lower()
+    for item in payload:
+        created_at = datetime.fromisoformat(item["created_at"])
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        assert created_at == tied_created_at
+    serialized = str(payload).lower()
     for prohibited in (
         "private-account",
         "private-checksum",
@@ -354,7 +365,9 @@ def test_finding_detail_is_owner_scoped_and_excludes_sensitive_evidence() -> Non
         )
         finding.set_matched_terms('["private employer"]')
         finding.set_evidence_excerpt("private account evidence")
-        db.add_all([scan, document, finding])
+        db.add_all([scan, document])
+        db.flush()
+        db.add(finding)
         db.commit()
     finally:
         db.close()

@@ -11,6 +11,7 @@ os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.database.connection import Base, SessionLocal, engine
 from app.models.discovery import DiscoveryScan, EvidenceFinding
+from app.models.document import Document
 from app.models.user import User
 from app.services.discovery_reports import DiscoveryReportService
 
@@ -34,6 +35,16 @@ def test_safe_export_contains_counts_but_not_evidence() -> None:
             documents_processed=1,
             created_at=datetime.now(timezone.utc),
         )
+        document = Document(
+            id="report-document",
+            user_id=user.id,
+            document_type="ACCOUNT_STATEMENT",
+            document_name="Discovery source",
+        )
+        db.add(user)
+        db.flush()
+        db.add_all([scan, document])
+        db.flush()
         finding = EvidenceFinding(
             id="report-finding",
             scan_id=scan.id,
@@ -44,7 +55,7 @@ def test_safe_export_contains_counts_but_not_evidence() -> None:
         )
         finding.set_matched_terms('["secret-term"]')
         finding.set_evidence_excerpt("Sensitive raw evidence")
-        db.add_all([user, scan, finding])
+        db.add(finding)
         db.commit()
 
         payload = DiscoveryReportService().build_safe_export(db, scan)

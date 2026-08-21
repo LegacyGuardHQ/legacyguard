@@ -6,7 +6,7 @@ This milestone keeps LegacyGuard on the existing single-instance architecture:
 
 - one backend service
 - one frontend build
-- one persistent database volume
+- one PostgreSQL database (managed service or persistent self-hosted volume)
 - one persistent document-storage volume
 - environment-based configuration and secrets
 
@@ -14,7 +14,8 @@ This milestone keeps LegacyGuard on the existing single-instance architecture:
 
 - Python 3.12 runtime
 - Node.js 24 for frontend builds
-- a persistent filesystem for the database and document storage
+- PostgreSQL 16 or another currently supported PostgreSQL release
+- a persistent filesystem or object-store mount for document storage
 - a secret-management process for runtime secrets
 
 ## Production environment variables
@@ -35,6 +36,54 @@ Optional:
 - ACCESS_TOKEN_EXPIRE_MINUTES
 - REFRESH_TOKEN_EXPIRE_DAYS
 - DISCOVERY_STALE_SCAN_THRESHOLD_SECONDS
+- DATABASE_POOL_SIZE (default: 5)
+- DATABASE_MAX_OVERFLOW (default: 10)
+- DATABASE_POOL_TIMEOUT_SECONDS (default: 30)
+- DATABASE_POOL_RECYCLE_SECONDS (default: 1800)
+
+## PostgreSQL connection
+
+Psycopg 3 is the supported PostgreSQL driver. LegacyGuard accepts provider URLs
+beginning with `postgres://` or `postgresql://` and normalizes them to the
+SQLAlchemy `postgresql+psycopg://` dialect. An explicit dialect URL is also
+accepted:
+
+```text
+postgresql+psycopg://APP_USER:PERCENT_ENCODED_PASSWORD@DB_HOST:5432/DB_NAME?sslmode=require
+```
+
+Keep the complete URL in the deployment secret store. Percent-encode reserved
+characters in credentials and never print the resolved URL in logs or CI output.
+
+Require encrypted transport in production. `sslmode=require` prevents plaintext
+transport; prefer `sslmode=verify-full` with the provider CA root when the
+hosting platform exposes certificate configuration. Follow the provider's
+certificate-rotation guidance rather than embedding certificates in the image.
+
+The application uses SQLAlchemy's bounded queue pool with connection liveness
+checks. The defaults allow 5 persistent connections and 10 temporary overflow
+connections per backend process. Size the database connection limit for
+`(pool size + max overflow) * backend process count`, leaving capacity for
+migrations, administration, monitoring, and provider-reserved connections.
+
+## Database roles and privileges
+
+Use separate credentials when the hosting platform supports them:
+
+- a migration role that owns the LegacyGuard schema and can create, alter, and
+  drop schema objects during a reviewed deployment migration
+- a runtime role with `CONNECT` on the database, `USAGE` on the application
+  schema, and only the required `SELECT`, `INSERT`, `UPDATE`, and `DELETE` table
+  privileges plus sequence usage
+
+Neither role should be a PostgreSQL superuser or have `CREATEDB`/`CREATEROLE`.
+Configure default privileges so new migration-created tables and sequences are
+usable by the runtime role. Revoke broad `PUBLIC` schema creation rights where
+the provider permits it. Store and rotate both credentials independently.
+
+SQLite remains supported for local development and isolated tests. It is not
+the recommended production database because it does not provide the concurrent
+connection, managed-backup, and availability characteristics expected here.
 
 ## Secret generation
 
@@ -52,7 +101,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 ## Deployment sequence
 
-1. Provision persistent storage for the database and documents.
+1. Provision PostgreSQL and persistent document storage.
 2. Load production environment variables and secrets.
 3. Create a backup of existing data before upgrading.
 4. Run Alembic migrations:
@@ -65,6 +114,11 @@ alembic upgrade head
 The Alembic CLI reads `DATABASE_URL` from the deployment environment. Confirm
 that it identifies the intended database before running the command; never
 substitute a production URL in local smoke or migration tests.
+
+For a new PostgreSQL database, first prove the same operation against an empty,
+disposable database. The Backend CI `PostgreSQL migrations and tests` job runs
+the entire migration chain from zero to head, verifies readiness, and executes
+the backend suite against PostgreSQL 16 on every pull request.
 
 5. Start the backend.
 6. Verify /health/live.

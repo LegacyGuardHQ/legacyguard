@@ -9,6 +9,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 from app.config import settings
+from app.database.url import normalize_database_url
 
 
 def _alembic_config(database_url: str | None = None) -> Config:
@@ -16,14 +17,14 @@ def _alembic_config(database_url: str | None = None) -> Config:
     config = Config(str(backend_root / "alembic.ini"))
     config.set_main_option("script_location", str(backend_root / "alembic"))
     if database_url is not None:
-        config.set_main_option("sqlalchemy.url", database_url)
+        config.set_main_option("sqlalchemy.url", normalize_database_url(database_url).replace("%", "%%"))
         config.attributes["database_url_explicit"] = True
     return config
 
 
 def _get_current_revision(database_url: str | None = None) -> str | None:
     config = _alembic_config(database_url)
-    engine = create_engine(database_url or settings.database_url)
+    engine = create_engine(normalize_database_url(database_url or settings.database_url))
     try:
         with engine.connect() as connection:
             result = connection.execute(text("SELECT version_num FROM alembic_version"))
