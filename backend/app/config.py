@@ -1,6 +1,6 @@
 import re
 
-from pydantic import ValidationError, computed_field, model_validator
+from pydantic import Field, ValidationError, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEV_ENCRYPTION_KEY = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     app_name: str = "LegacyGuard"
     debug: bool = False
     database_url: str = "sqlite:///./legacyguard.db"
+    database_pool_size: int = Field(default=5, ge=1)
+    database_max_overflow: int = Field(default=10, ge=0)
+    database_pool_timeout_seconds: int = Field(default=30, ge=1)
+    database_pool_recycle_seconds: int = Field(default=1800, ge=1)
     secret_key: str = "legacyguard-dev-secret-key-123456"
     encryption_key: str = DEV_ENCRYPTION_KEY
     jwt_secret: str = "legacyguard-dev-jwt-secret-123456"
