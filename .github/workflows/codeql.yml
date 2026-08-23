@@ -21,8 +21,8 @@ concurrency:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    # Code scanning is unavailable while this repository is private; activate automatically if it becomes public.
-    if: github.event.repository.visibility == 'public'
+    # Disabled by default; set the repository variable CODEQL_ENABLED=true when code scanning is available.
+    if: ${{ vars.CODEQL_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
