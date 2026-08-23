@@ -88,5 +88,3 @@ jobs:
 
       - name: Run backend tests against PostgreSQL
         run: python -m pytest
-
-# Recovery repository workflow registration
