@@ -22,9 +22,13 @@ GitHub issue, discussion, or pull request.
 Use GitHub's private vulnerability reporting or security-advisory mechanism
 when available for this repository.
 
-If a private GitHub reporting mechanism is not available, contact the project
-maintainer through a verified private contact method listed on the
-maintainer's GitHub profile.
+This repository is currently private while its permanent location is being
+resolved, so GitHub's private reporting interface may not be visible to every
+reporter. If it is unavailable, use the maintainer's public GitHub profile only
+to request a private reporting channel. Do not include vulnerability details,
+proof-of-concept code, secrets, or personal information in that initial public
+request. A permanent private reporting route will be documented before the
+repository is made public.
 
 Please provide enough information to reproduce and evaluate the issue while
 avoiding unnecessary disclosure of sensitive information.

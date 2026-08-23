@@ -6,9 +6,13 @@ Do not disclose a suspected vulnerability, exploit, sensitive log, secret, or
 personal information in a public issue or discussion.
 
 Use **Report a vulnerability** on the repository's **Security** tab when that
-option is available. If it is not available, contact the maintainer through the
-public GitHub profile only to request a private reporting channel; do not include
-technical vulnerability details in the initial public message.
+option is available. The repository is currently private while its permanent
+location is unresolved, so that option may not be visible to every reporter. If
+it is unavailable, use the maintainer's public GitHub profile only to request a
+private reporting channel; do not include technical vulnerability details,
+proof-of-concept code, secrets, or personal information in the initial public
+message. A permanent private reporting route will be documented before public
+visibility is enabled.
 
 Include the affected version, a concise impact statement, safe reproduction
 steps, and suggested remediation when possible. Use synthetic data and allow a

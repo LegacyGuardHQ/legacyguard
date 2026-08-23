@@ -1,101 +1,111 @@
 # LegacyGuard
 
-LegacyGuard is a secure personal asset continuity and legacy planning system. It helps a person document assets, beneficiaries, important documents, and instructions so trusted people can locate and manage them if the user becomes incapacitated or dies.
+LegacyGuard is a privacy-first personal asset continuity and legacy-planning application. It helps people organize assets, beneficiaries, important documents, and discovery results so that information can be reviewed and maintained in one workspace.
 
-## Project purpose
-- Centralize continuity planning information
-- Protect sensitive personal and financial data
-- Support future trusted-contact and emergency workflows
+> **Development status:** Development is active, but LegacyGuard is not approved for real personal, financial, medical, estate, credential, or other sensitive data. Use synthetic data only. No public production application is currently available.
 
-## Security model overview
-The initial security foundation includes:
-- password hashing with bcrypt
-- JWT-based authentication for protected routes
-- user ownership validation for future account-scoped data
-- audit logging for auth events such as login success, login failure, and account creation
+LegacyGuard is software, not legal, financial, tax, medical, or estate-planning advice. Consult qualified professionals for decisions in those areas.
 
-## Environment setup
-Create a backend environment file from the template:
+Development is currently hosted in a recovery repository while restoration of the original repository remains unresolved. The permanent canonical repository location has not been decided.
 
-```bash
-cd backend
-copy .env.example .env
-```
+## Implemented on master
 
-Fill in the required placeholders for:
-- DATABASE_URL
-- SECRET_KEY
-- ENCRYPTION_KEY
-- JWT_SECRET
-- ENVIRONMENT
+The current `master` branch includes:
 
-## Authentication workflow
-1. Register a user through the /auth/register endpoint
-2. Log in through the /auth/login endpoint
-3. Use the returned access token in the Authorization header for protected routes
-4. Access the current-user profile through /auth/me
+- registration, login, protected routes, session restoration, and logout
+- a workspace home dashboard
+- asset and beneficiary management
+- the Document Vault, including encrypted document upload for development use
+- Discovery overview and document discovery processing
+- scan history and scan detail
+- the Review Queue and finding detail
+- user-initiated conversion of a confirmed, reviewed finding into an asset that remains marked for review
+- SQLite support for local development and PostgreSQL compatibility for deployment
 
-## Installation
+Discovery confidence represents signal strength, not proof of ownership, authenticity, value, or legal validity. Production storage, malware scanning, backup and recovery, managed key handling, operational controls, and independent security/privacy review remain required before real-data use.
+
+## Local development
+
+### Prerequisites
+
+- Python 3.12
+- Node.js 24 and npm
 
 ### Backend
+
+From the repository root:
+
 ```bash
 cd backend
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+```
+
+Activate the environment:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+On macOS or Linux, use `source .venv/bin/activate` instead. Then install dependencies and create a local configuration:
+
+```bash
+python -m pip install -r requirements.txt
+cp .env.example .env
+```
+
+On Windows Command Prompt, use `copy .env.example .env`. Replace every `CHANGE_ME` value in `.env`; generate the Fernet key using the command documented in the template. The template is for development only and is intentionally not a usable production configuration.
+
+Apply migrations and start the API:
+
+```bash
+python -m alembic upgrade head
+python -m uvicorn app.main:app --reload
 ```
 
 ### Frontend
+
+In another terminal, from the repository root:
+
 ```bash
 cd frontend
-npm install
-```
-
-## Development commands
-
-### Backend
-```bash
-cd backend
-uvicorn app.main:app --reload
-```
-
-### Frontend
-```bash
-cd frontend
+npm ci
 npm run dev
 ```
 
-### Tests
+## Validation
+
+Run the backend suite:
+
 ```bash
 cd backend
-pytest
+python -m pytest
 ```
 
-## Security principles
-- Use encrypted storage and secure transport
-- Apply least-privilege access controls
-- Keep audit trails for privileged changes
-- Avoid storing secrets in source control
-- Plan for future MFA and role-based access
+Run frontend tests and the production build:
 
-## Join the project
+```bash
+cd frontend
+npm test
+npm run build
+```
 
-LegacyGuard is licensed under the GNU Affero General Public License v3.0
-(AGPL-3.0) — see [LICENSE](LICENSE). This repository is currently a private
-disaster-recovery copy while GitHub Support attempts to restore the original
-LegacyGuard organization and repository; its canonical location and visibility
-may change after the restoration outcome is known. Outside code contributions
-are not yet open until contribution terms are published.
-Security reviewers, designers, documentation writers, and mission-aligned
-partners can still help shape the readiness work safely.
+PostgreSQL migration and test coverage also runs in Backend CI. See [the deployment guide](docs/DEPLOYMENT.md) for its synthetic test configuration and production-oriented requirements.
 
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change.
-- Use the guided [issue templates](.github/ISSUE_TEMPLATE) for bugs, features,
-  security reviews, and partnership ideas.
-- Review [SUPPORT.md](SUPPORT.md) for the current funding policy and safe ways
-  to help.
-- Visit the [LegacyGuard public project site](https://legacyguard-continuity.james23sf.chatgpt.site/).
+## Security and privacy
 
-The public project does not currently accept or store real personal, estate,
-financial, medical, or credential information. Please use synthetic data in
-all demonstrations and bug reports.
+- Never commit `.env` files, keys, tokens, credentials, databases, uploaded documents, or real user information.
+- Use encrypted transport and an approved secrets manager for any deployed environment.
+- Apply least-privilege access and retain privacy-safe audit trails.
+- Read [SECURITY.md](SECURITY.md) before reporting a vulnerability.
+- Read [the security design](docs/SECURITY.md) and [data-protection guidance](docs/DATA_PROTECTION.md) before evaluating deployment.
+
+## Contributing and project information
+
+LegacyGuard is licensed under the [GNU Affero General Public License v3.0](LICENSE). Outside code contributions are not yet open until contribution terms are published, but proposals may use the repository's guided issue templates when accessible.
+
+- [Contributing guidance](CONTRIBUTING.md)
+- [Project state](docs/PROJECT_STATE.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Changelog](CHANGELOG.md)
+- [Support policy](SUPPORT.md)
+- [Public project information site](https://legacyguard-continuity.james23sf.chatgpt.site/)
