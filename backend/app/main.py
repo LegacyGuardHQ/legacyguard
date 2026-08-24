@@ -15,6 +15,7 @@ from app.api.health import router as health_router
 from app.config import get_settings, settings
 from app.services.encryption import validate_encryption_key
 from app.services.operational_logging import log_event
+from app.version import __version__
 
 
 @asynccontextmanager
@@ -43,7 +44,7 @@ logging.getLogger("legacyguard").setLevel(logging.INFO)
 app = FastAPI(
     title="LegacyGuard",
     description="Secure personal asset continuity and legacy planning system",
-    version="0.1.0",
+    version=__version__,
     lifespan=lifespan,
 )
 

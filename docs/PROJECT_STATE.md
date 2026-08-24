@@ -4,7 +4,7 @@
 
 Development is currently hosted in a private recovery repository while restoration of the original `LegacyGuard/legacyguard` repository remains unresolved. This is an operational hosting status, not a decision about the permanent canonical repository name or owner.
 
-Recovery-repository PRs #5 through #10 are merged into `master`. They added the Asset Management UI, Beneficiary Management UI, Document Vault UI, Workspace Dashboard, deployment-aware Alembic database configuration, and PostgreSQL production compatibility.
+Recovery-repository PRs #5 through #12 are merged into `master`. PRs #5 through #10 added the Asset Management UI, Beneficiary Management UI, Document Vault UI, Workspace Dashboard, deployment-aware Alembic database configuration, and PostgreSQL compatibility. PR #11 prepared public/canonical repository onboarding documentation, and PR #12 hardened GitHub security automation.
 
 ## Current product capabilities
 

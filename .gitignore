@@ -58,3 +58,5 @@ venv/
 env/
 backend/.venv*/
 .continue/
+# Generated release-candidate artifacts
+/release-artifacts/

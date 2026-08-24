@@ -1,18 +1,41 @@
 # Changelog
 
-This file records notable changes supported by repository history. LegacyGuard has not selected the next release version.
+This file records notable changes supported by repository history. The release candidate below is being prepared and has not yet been tagged or published.
 
-## Unreleased
+## 1.1.0-rc.1 - Unreleased release candidate
 
-Changes currently on `master` since `v1.0.1` include:
+### Features
 
-- added Workspace, Asset Management, Beneficiary Management, and Document Vault user interfaces
-- added Discovery overview, scan history/detail, Review Queue, finding detail, and manual reviewed-finding-to-asset conversion interfaces
-- added frontend design tokens, accessibility improvements, component guidance, Storybook configuration, reusable state components, and loading skeletons
-- improved frontend CI reliability and expanded backend/frontend regression coverage
-- added public-readiness licensing, governance, contribution, support, issue, and security guidance
-- made Alembic honor the deployment `DATABASE_URL`
-- added PostgreSQL compatibility, PostgreSQL migration/test CI coverage, dialect-aware migrations, and production database guidance
+- Added the Workspace dashboard and Asset Management, Beneficiary Management, and Document Vault interfaces.
+- Integrated Discovery overview, scan history/detail, Review Queue, finding detail, and confirmed-finding-to-asset conversion into the workspace. Converted assets remain marked for review.
+- Added frontend design tokens, accessibility improvements, component guidance, Storybook configuration, reusable state components, and loading skeletons.
+
+### Security and reliability
+
+- Rejected default cryptographic keys outside tests.
+- Bounded document upload reads, registration inputs, registration attempts, and concurrent Discovery scan processing.
+- Moved login-failure limiting to shared database state.
+- Corrected document storage so all relevant services honor the configured storage root.
+- Added dependency auditing, immutable GitHub Action pins, disabled checkout credential persistence, Dependabot, and a guarded CodeQL workflow. CodeQL remains disabled until repository eligibility and configuration permit it; no successful analysis is claimed.
+- Expanded backend and frontend regression coverage and corrected frontend CI reliability.
+
+### Database
+
+- Added PostgreSQL/Psycopg compatibility, connection-pool controls, and production-oriented database guidance. This does not mean the application is approved for production or real sensitive data.
+- Made Alembic honor the deployment `DATABASE_URL` and made migrations dialect-aware.
+- Added PostgreSQL zero-to-head migration, readiness, and backend test coverage in CI. SQLite remains supported for local development and isolated tests.
+
+### Release and CI
+
+- Added backend and frontend release checks, an RC readiness gate, and production-style synthetic smoke testing.
+- Added public-readiness licensing, governance, contribution, support, issue, and security guidance.
+
+### Compatibility notes
+
+- Registration now enforces email lengths of 3–254 characters and password lengths of 12–128 characters.
+- Registration and login may return HTTP 429 when rate limits are reached.
+- Authenticated users now land on `/workspace`; `/discovery` remains available.
+- SQLite remains supported for local development and isolated tests.
 
 ## v1.0.1
 
