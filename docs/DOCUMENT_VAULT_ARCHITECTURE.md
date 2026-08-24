@@ -722,6 +722,13 @@ master key wrapped the per-document DEK; it is not key material. Existing single
 `ENCRYPTION_KEY` behavior remains unchanged, and no rotation is implemented by
 this state model.
 
+The decrypted persisted locator is authoritative for blob reads, existence
+checks, archival, and deletion. The local backend currently returns a validated
+relative locator beneath its configured root; a future object backend may return
+an arbitrary opaque object key that cannot be derived from the document UUID.
+`document_id` remains a cryptographic and authorization identifier, not a storage
+address, and locators are never public API identifiers.
+
 The legacy plaintext `checksum_sha256` column is retained for additive migration
 and rollback compatibility, but new uploads do not populate it and API responses
 do not expose it. Ciphertext SHA-256 plus Fernet authentication provide the new

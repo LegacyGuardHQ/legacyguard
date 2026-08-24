@@ -7,7 +7,7 @@ import tempfile
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 class DocumentStorageError(ValueError):
@@ -37,7 +37,7 @@ class DocumentStorage(ABC):
     @abstractmethod
     def read_encrypted(
         self,
-        document_id: str,
+        locator: str,
         *,
         expected_sha256: str | None = None,
         expected_size: int | None = None,
@@ -45,11 +45,11 @@ class DocumentStorage(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def exists(self, document_id: str) -> bool:
+    def exists(self, locator: str) -> bool:
         raise NotImplementedError
 
     @abstractmethod
-    def archive(self, document_id: str) -> None:
+    def archive(self, locator: str) -> str:
         """Apply backend archival semantics.
 
         Backends may retain an immutable object in place when archival is represented
@@ -58,7 +58,7 @@ class DocumentStorage(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def delete_permanently(self, document_id: str) -> None:
+    def delete_permanently(self, locator: str) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -90,6 +90,26 @@ class LocalDocumentStorage(DocumentStorage):
             raise DocumentStorageError("Invalid document storage path")
         return path
 
+    def _path_from_locator(self, locator: str, *, allowed_roots: tuple[Path, ...] | None = None) -> Path:
+        windows_locator = PureWindowsPath(locator)
+        if not locator or PurePosixPath(locator).is_absolute() or windows_locator.is_absolute() or windows_locator.drive:
+            raise DocumentStorageError("Invalid document storage locator")
+        try:
+            locator_path = Path(locator)
+            if ".." in locator_path.parts or ".." in windows_locator.parts:
+                raise DocumentStorageError("Invalid document storage locator")
+            path = (self.root / locator_path).resolve()
+            permitted_roots = allowed_roots or (self.active_root, self.archive_root)
+            within_permitted_root = any(
+                os.path.commonpath([str(root.resolve()), str(path)]) == str(root.resolve())
+                for root in permitted_roots
+            )
+        except (OSError, ValueError) as exc:
+            raise DocumentStorageError("Invalid document storage locator") from exc
+        if not within_permitted_root:
+            raise DocumentStorageError("Invalid document storage locator")
+        return path
+
     def save_encrypted(self, document_id: str, encrypted_bytes: bytes) -> str:
         if not encrypted_bytes:
             raise DocumentStorageError("Encrypted document bytes are required")
@@ -118,20 +138,15 @@ class LocalDocumentStorage(DocumentStorage):
 
     def read_encrypted(
         self,
-        document_id: str,
+        locator: str,
         *,
         expected_sha256: str | None = None,
         expected_size: int | None = None,
     ) -> bytes:
-        path = self._path_for(document_id)
-        if not path.exists():
-            archived_path = self._path_for(document_id, archived=True)
-            if archived_path.exists():
-                encrypted_bytes = archived_path.read_bytes()
-            else:
-                raise DocumentStorageError("Encrypted document not found")
-        else:
-            encrypted_bytes = path.read_bytes()
+        path = self._path_from_locator(locator)
+        if not path.is_file():
+            raise DocumentStorageError("Encrypted document not found")
+        encrypted_bytes = path.read_bytes()
         if expected_size is not None and len(encrypted_bytes) != expected_size:
             raise DocumentIntegrityError("Encrypted document size mismatch")
         if expected_sha256 is not None:
@@ -141,21 +156,24 @@ class LocalDocumentStorage(DocumentStorage):
                 raise DocumentIntegrityError("Encrypted document checksum mismatch")
         return encrypted_bytes
 
-    def exists(self, document_id: str) -> bool:
-        return self._path_for(document_id).exists() or self._path_for(document_id, archived=True).exists()
+    def exists(self, locator: str) -> bool:
+        return self._path_from_locator(locator).is_file()
 
-    def archive(self, document_id: str) -> None:
-        source = self._path_for(document_id)
-        if not source.exists():
+    def archive(self, locator: str) -> str:
+        source = self._path_from_locator(locator, allowed_roots=(self.active_root,))
+        if not source.is_file():
             raise DocumentStorageError("Encrypted document not found")
-        target = self._path_for(document_id, archived=True)
+        target = self._path_from_locator(
+            str(Path("archive") / source.name),
+            allowed_roots=(self.archive_root,),
+        )
         source.replace(target)
+        return str(target.relative_to(self.root))
 
-    def delete_permanently(self, document_id: str) -> None:
-        for archived in (False, True):
-            path = self._path_for(document_id, archived=archived)
-            if path.exists():
-                path.unlink()
+    def delete_permanently(self, locator: str) -> None:
+        path = self._path_from_locator(locator)
+        if path.is_file():
+            path.unlink()
 
     def check_readiness(self) -> StorageReadiness:
         configuration_valid = self.active_root.parent == self.root and self.archive_root.parent == self.root

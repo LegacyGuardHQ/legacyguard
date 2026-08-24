@@ -37,7 +37,8 @@ from app.models.discovery_scan_document import (
     DiscoveryScanDocument,
 )
 from app.models.document import Document
-from app.services.discovery_orchestrator import DISCOVERY_FAILED, DiscoveryOrchestrator
+from app.services.discovery_orchestrator import DISCOVERY_FAILED, DiscoveryOrchestrator, EncryptedDocumentTextProvider
+from app.services.document_storage import DocumentIntegrityError
 from app.services.document_validation import DocumentValidationError, MAX_DOCUMENT_BYTES
 from app.services.rate_limit import rate_limiter
 
@@ -96,6 +97,47 @@ def _post_document(token: str, **overrides):
     }
     payload.update(overrides)
     return client.post("/documents", headers={"Authorization": f"Bearer {token}"}, json=payload)
+
+
+def _storage_locator(document_id: str) -> str:
+    db = SessionLocal()
+    try:
+        locator = db.query(Document).filter(Document.id == document_id).one().get_storage_reference()
+        assert locator is not None
+        return locator
+    finally:
+        db.close()
+
+
+class OpaqueMemoryStorage:
+    locator = "opaque/random/upload-attempt-a9f7.lgdoc"
+
+    def __init__(self) -> None:
+        self.blobs: dict[str, bytes] = {}
+
+    def save_encrypted(self, document_id: str, encrypted_bytes: bytes) -> str:
+        assert document_id not in self.locator
+        self.blobs[self.locator] = encrypted_bytes
+        return self.locator
+
+    def read_encrypted(self, locator: str, *, expected_sha256=None, expected_size=None) -> bytes:
+        encrypted_bytes = self.blobs[locator]
+        if expected_size is not None and len(encrypted_bytes) != expected_size:
+            raise DocumentIntegrityError("Encrypted document size mismatch")
+        if expected_sha256 is not None and hashlib.sha256(encrypted_bytes).hexdigest() != expected_sha256:
+            raise DocumentIntegrityError("Encrypted document checksum mismatch")
+        return encrypted_bytes
+
+    def exists(self, locator: str) -> bool:
+        return locator in self.blobs
+
+    def archive(self, locator: str) -> str:
+        archived_locator = f"archived/{locator}"
+        self.blobs[archived_locator] = self.blobs.pop(locator)
+        return archived_locator
+
+    def delete_permanently(self, locator: str) -> None:
+        self.blobs.pop(locator, None)
 
 
 def test_authenticated_user_creates_metadata_only_document_and_user_id_server_side() -> None:
@@ -399,7 +441,9 @@ def test_upload_stores_encrypted_bytes_and_recoverable_plaintext() -> None:
     db = SessionLocal()
     try:
         saved = db.query(Document).filter(Document.id == document_id).one()
-        encrypted_bytes = documents_api.document_storage.read_encrypted(document_id)
+        locator = saved.get_storage_reference()
+        assert locator is not None
+        encrypted_bytes = documents_api.document_storage.read_encrypted(locator)
         assert encrypted_bytes != plaintext
         assert plaintext not in encrypted_bytes
         assert saved.storage_reference is None
@@ -416,7 +460,50 @@ def test_upload_stores_encrypted_bytes_and_recoverable_plaintext() -> None:
         assert saved.master_key_id == "legacy-current-v1"
     finally:
         db.close()
-        documents_api.document_storage.delete_permanently(document_id)
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
+
+
+def test_upload_and_discovery_use_non_derivable_authoritative_locator(monkeypatch) -> None:
+    storage = OpaqueMemoryStorage()
+    monkeypatch.setattr(documents_api, "document_storage", storage)
+    monkeypatch.setattr(documents_api, "_trigger_discovery_scan_after_upload", lambda *args, **kwargs: None)
+    token = _token("opaque-storage@example.com")
+    document_id = _post_document(
+        token,
+        original_filename="statement.txt",
+        mime_type="text/plain",
+        file_size=7,
+    ).json()["id"]
+
+    response = _upload_document(
+        token,
+        document_id,
+        content=b"account",
+        filename="statement.txt",
+        mime_type="text/plain",
+    )
+    assert response.status_code == 200
+
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == document_id).one()
+        locator = document.get_storage_reference()
+        assert locator == storage.locator
+        assert storage.exists(locator)
+        assert EncryptedDocumentTextProvider(storage=storage).get_text(document) == "account"
+
+        wrong_blob = storage.blobs[locator]
+        storage.blobs[locator] = b"x" + wrong_blob[1:]
+        with pytest.raises(DocumentIntegrityError):
+            EncryptedDocumentTextProvider(storage=storage).get_text(document)
+        storage.blobs[locator] = wrong_blob
+
+        archived_locator = storage.archive(locator)
+        assert storage.exists(archived_locator)
+        storage.delete_permanently(archived_locator)
+        assert not storage.exists(archived_locator)
+    finally:
+        db.close()
 
 
 def test_upload_rejects_client_supplied_extra_fields_and_reupload_conflict() -> None:
@@ -511,9 +598,9 @@ def test_upload_database_failure_after_storage_triggers_cleanup(monkeypatch) -> 
     def save_and_mark(document_id: str, encrypted_bytes: bytes) -> str:
         return original_save(document_id, encrypted_bytes)
 
-    def delete_and_track(document_id: str) -> None:
+    def delete_and_track(locator: str) -> None:
         deleted["called"] = True
-        original_delete(document_id)
+        original_delete(locator)
 
     monkeypatch.setattr(documents_api.document_storage, "save_encrypted", save_and_mark)
     monkeypatch.setattr(documents_api.document_storage, "delete_permanently", delete_and_track)
@@ -588,7 +675,7 @@ def test_upload_triggers_discovery_scan_for_text_document() -> None:
         assert findings_response.status_code == 200
         assert findings_response.json()["total_count"] >= 1
     finally:
-        documents_api.document_storage.delete_permanently(document_id)
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
 def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
@@ -620,9 +707,9 @@ def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
         finally:
             db.close()
 
-        assert documents_api.document_storage.exists(document_id)
+        assert documents_api.document_storage.exists(_storage_locator(document_id))
     finally:
-        documents_api.document_storage.delete_permanently(document_id)
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
 def test_upload_schedules_discovery_without_running_it_inline(monkeypatch) -> None:
@@ -671,9 +758,9 @@ def test_upload_schedules_discovery_without_running_it_inline(monkeypatch) -> No
             assert db.query(DiscoveryScanDocument).filter(DiscoveryScanDocument.scan_id == scan.id).count() == 0
         finally:
             db.close()
-        assert documents_api.document_storage.exists(document_id)
+        assert documents_api.document_storage.exists(_storage_locator(document_id))
     finally:
-        documents_api.document_storage.delete_permanently(document_id)
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
 def test_background_discovery_uses_and_closes_fresh_session(monkeypatch) -> None:
@@ -937,9 +1024,9 @@ def test_genuine_background_discovery_failure_does_not_break_upload(monkeypatch)
             assert "sensitive background failure text" not in audit_text
         finally:
             db.close()
-        assert documents_api.document_storage.exists(document_id)
+        assert documents_api.document_storage.exists(_storage_locator(document_id))
     finally:
-        documents_api.document_storage.delete_permanently(document_id)
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
 def test_upload_survives_background_scheduling_failure(monkeypatch) -> None:
@@ -978,9 +1065,9 @@ def test_upload_survives_background_scheduling_failure(monkeypatch) -> None:
             assert scan.completed_at is not None
         finally:
             db.close()
-        assert documents_api.document_storage.exists(document_id)
+        assert documents_api.document_storage.exists(_storage_locator(document_id))
     finally:
-        documents_api.document_storage.delete_permanently(document_id)
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
 def test_upload_survives_scan_creation_audit_failure_without_scheduling(monkeypatch) -> None:
@@ -1028,9 +1115,9 @@ def test_upload_survives_scan_creation_audit_failure_without_scheduling(monkeypa
             assert scan.completed_at is None
         finally:
             db.close()
-        assert documents_api.document_storage.exists(document_id)
+        assert documents_api.document_storage.exists(_storage_locator(document_id))
     finally:
-        documents_api.document_storage.delete_permanently(document_id)
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
 def test_upload_still_succeeds_when_post_upload_discovery_raises(monkeypatch) -> None:
@@ -1070,9 +1157,9 @@ def test_upload_still_succeeds_when_post_upload_discovery_raises(monkeypatch) ->
         finally:
             db.close()
 
-        assert documents_api.document_storage.exists(document_id)
+        assert documents_api.document_storage.exists(_storage_locator(document_id))
     finally:
-        documents_api.document_storage.delete_permanently(document_id)
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
 def test_empty_discovery_scan_request_remains_rejected() -> None:

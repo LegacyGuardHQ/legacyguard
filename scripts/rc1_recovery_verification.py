@@ -146,11 +146,11 @@ def verify_sqlite_opens_and_has_table(db_path: Path) -> bool:
         return row is not None
 
 
-def verify_document_exists(document_id: str, document_root: str) -> bool:
+def verify_document_exists(storage_locator: str, document_root: str) -> bool:
     from app.services.document_storage import LocalDocumentStorage
 
     storage = LocalDocumentStorage(document_root)
-    return storage.exists(document_id)
+    return storage.exists(storage_locator)
 
 
 def assert_health_ok(label: str, health: dict[str, Any]) -> None:
@@ -234,7 +234,7 @@ def main() -> int:
             raise SystemExit("restored database did not open as expected")
         if not verify_database_record(marker_id):
             raise SystemExit("restored database record missing")
-        if not verify_document_exists(document_id, str(restore_docs)):
+        if not verify_document_exists(document_relative_path, str(restore_docs)):
             raise SystemExit("restored document missing")
         restore_health = verify_health(restore_app)
         assert_health_ok("RESTORE", restore_health)
@@ -282,7 +282,7 @@ def main() -> int:
             raise SystemExit("rollback database did not open as expected")
         if not verify_database_record(marker_id):
             raise SystemExit("rollback database record missing")
-        if not verify_document_exists(document_id, str(rollback_docs)):
+        if not verify_document_exists(document_relative_path, str(rollback_docs)):
             raise SystemExit("rollback document missing")
         rollback_health = verify_health(rollback_app)
         assert_health_ok("ROLLBACK", rollback_health)

@@ -393,7 +393,7 @@ async def upload_encrypted_document_content(
         db.rollback()
         if storage_reference is not None:
             try:
-                document_storage.delete_permanently(document.id)
+                document_storage.delete_permanently(storage_reference)
             except Exception:
                 logger.exception("Failed to remove orphaned encrypted document content", extra={"document_id": document.id})
         _mark_upload_failed(db, document.id, attempt_id, "DATABASE_COMMIT_FAILED")

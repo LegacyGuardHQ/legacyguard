@@ -39,13 +39,17 @@ from app.services.discovery_orchestrator import (
 class MemoryStorage:
     def __init__(self, encrypted_bytes: bytes) -> None:
         self.encrypted_bytes = encrypted_bytes
+        self.requested_locator: str | None = None
 
-    def read_encrypted(self, document_id: str, **kwargs) -> bytes:
+    def read_encrypted(self, locator: str, **kwargs) -> bytes:
+        self.requested_locator = locator
+        if locator != "opaque/random/non-derivable-object-key.lgdoc":
+            raise RuntimeError("wrong locator")
         return self.encrypted_bytes
 
 
 class FailingStorage:
-    def read_encrypted(self, document_id: str, **kwargs) -> bytes:
+    def read_encrypted(self, locator: str, **kwargs) -> bytes:
         raise RuntimeError("storage failure")
 
 
@@ -88,6 +92,7 @@ def _create_document_with_encrypted_content(*, mime_type: str, plaintext: bytes)
             ciphertext_sha256=encrypted.checksum_sha256,
             ciphertext_size=len(encrypted.encrypted_bytes),
         )
+        document.set_storage_reference("opaque/random/non-derivable-object-key.lgdoc")
         db.add_all([user, document])
         db.commit()
         return document_id, encrypted.encrypted_bytes
@@ -97,11 +102,13 @@ def _create_document_with_encrypted_content(*, mime_type: str, plaintext: bytes)
 
 def test_text_document_flows_through_extraction() -> None:
     document_id, encrypted_bytes = _create_document_with_encrypted_content(mime_type="text/plain", plaintext=b"  retirement\r\n rollover  ")
-    provider = EncryptedDocumentTextProvider(storage=MemoryStorage(encrypted_bytes))
+    storage = MemoryStorage(encrypted_bytes)
+    provider = EncryptedDocumentTextProvider(storage=storage)
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == document_id).one()
         assert provider.get_text(document) == "retirement\nrollover"
+        assert storage.requested_locator == "opaque/random/non-derivable-object-key.lgdoc"
     finally:
         db.close()
 
@@ -186,6 +193,37 @@ def test_pending_document_is_not_discovery_eligible() -> None:
     )
 
     with pytest.raises(DiscoveryOrchestrationError, match="eligible storage state"):
+        EncryptedDocumentTextProvider(storage=MemoryStorage(b"unused")).get_text(document)
+
+
+def test_stored_document_without_locator_fails_closed() -> None:
+    document = Document(
+        id="550e8400-e29b-41d4-a716-446655440010",
+        user_id="user-1",
+        document_type="ACCOUNT_STATEMENT",
+        document_name="Missing locator",
+        mime_type="text/plain",
+        storage_state=DOCUMENT_STORAGE_STORED,
+        encryption_key_reference_encrypted="not-used",
+    )
+
+    with pytest.raises(DiscoveryOrchestrationError, match="locator is unavailable"):
+        EncryptedDocumentTextProvider(storage=MemoryStorage(b"unused")).get_text(document)
+
+
+def test_tampered_encrypted_locator_fails_closed() -> None:
+    document = Document(
+        id="550e8400-e29b-41d4-a716-446655440011",
+        user_id="user-1",
+        document_type="ACCOUNT_STATEMENT",
+        document_name="Tampered locator",
+        mime_type="text/plain",
+        storage_state=DOCUMENT_STORAGE_STORED,
+        encryption_key_reference_encrypted="not-used",
+        storage_reference_encrypted="tampered",
+    )
+
+    with pytest.raises(DiscoveryOrchestrationError, match="locator is unavailable"):
         EncryptedDocumentTextProvider(storage=MemoryStorage(b"unused")).get_text(document)
 
 

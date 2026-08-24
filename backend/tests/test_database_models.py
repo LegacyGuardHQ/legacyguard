@@ -357,8 +357,8 @@ def test_local_document_storage_uses_opaque_paths_and_rejects_traversal(tmp_path
 
     assert "550e8400" not in reference
     assert reference.endswith(".lgdoc")
-    assert storage.exists(document_id) is True
-    assert storage.read_encrypted(document_id) == encrypted_bytes
+    assert storage.exists(reference) is True
+    assert storage.read_encrypted(reference) == encrypted_bytes
     with pytest.raises(DocumentStorageError):
         storage.save_encrypted("../evil", encrypted_bytes)
 

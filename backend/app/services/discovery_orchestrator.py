@@ -117,8 +117,15 @@ class EncryptedDocumentTextProvider:
         if encrypted_key_reference is None:
             raise DiscoveryOrchestrationError("Document content is unavailable")
 
+        try:
+            storage_locator = document.get_storage_reference()
+        except Exception as exc:
+            raise DiscoveryOrchestrationError("Document storage locator is unavailable") from exc
+        if storage_locator is None:
+            raise DiscoveryOrchestrationError("Document storage locator is unavailable")
+
         encrypted_bytes = self.storage.read_encrypted(
-            document.id,
+            storage_locator,
             expected_sha256=document.ciphertext_sha256,
             expected_size=document.ciphertext_size,
         )
