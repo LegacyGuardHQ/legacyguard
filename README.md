@@ -55,6 +55,15 @@ cp .env.example .env
 
 On Windows Command Prompt, use `copy .env.example .env`. Replace every `CHANGE_ME` value in `.env`; generate the Fernet key using the command documented in the template. The template is for development only and is intentionally not a usable production configuration.
 
+Operating-system and process environment variables override values in `.env`. In PowerShell, inspect and remove an inherited `DEBUG` value before continuing with local setup:
+
+```powershell
+Get-ChildItem Env:DEBUG
+Remove-Item Env:DEBUG -ErrorAction SilentlyContinue
+```
+
+`Remove-Item Env:DEBUG` affects only the current PowerShell process; it does not delete a user-level or system-level setting. Other recognized LegacyGuard variables can override the local file in the same way: `APP_NAME`, `ENVIRONMENT`, `DATABASE_URL`, `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_POOL_TIMEOUT_SECONDS`, `DATABASE_POOL_RECYCLE_SECONDS`, `SECRET_KEY`, `ENCRYPTION_KEY`, `JWT_SECRET`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `CORS_ALLOWED_ORIGINS`, `DOCUMENT_STORAGE_ROOT`, and `DISCOVERY_STALE_SCAN_THRESHOLD_SECONDS`. Inspect any unexpected local behavior with `Get-ChildItem Env:` and remove only the conflicting variable from the current process, using the same command pattern, so the synthetic `.env` value is used.
+
 Apply migrations and start the API:
 
 ```bash

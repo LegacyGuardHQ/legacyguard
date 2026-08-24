@@ -7,6 +7,7 @@ This checklist prepares `v1.1.0-rc.1`; it does not assert that the tag or releas
 - Record the approved commit SHA and clone the canonical repository into a new directory on both Windows and a Unix-like system.
 - After the future tag is created, fetch that exact tag, verify its SSH signature with the documented allowed signers, and confirm its peeled commit equals the approved SHA.
 - Follow `README.md` from the clean checkout. Replace every development placeholder with newly generated synthetic values.
+- On Windows PowerShell, begin with the documented environment preflight. Confirm an inherited `DEBUG` value is removed from the current process and that no other process environment variable unexpectedly overrides the synthetic `.env` configuration.
 - Confirm `app.version.__version__`, FastAPI OpenAPI metadata, `frontend/package.json`, and the root package entries in `frontend/package-lock.json` all report `1.1.0-rc.1`.
 
 ## Automated validation
