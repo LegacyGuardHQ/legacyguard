@@ -46,12 +46,17 @@ Activate the environment:
 .venv\Scripts\Activate.ps1
 ```
 
-On macOS or Linux, use `source .venv/bin/activate` instead. Then install dependencies and create a local configuration:
+On macOS or Linux, use `source .venv/bin/activate` instead. Install the
+development/test dependencies and create a local configuration:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-test.txt
 cp .env.example .env
 ```
+
+Runtime-only environments install `requirements.txt`; that file intentionally
+excludes validation frameworks and the local S3 emulator. The production-style
+smoke harness uses `requirements-smoke.txt`, which adds only its HTTP test client.
 
 On Windows Command Prompt, use `copy .env.example .env`. Replace every `CHANGE_ME` value in `.env`; generate the Fernet key using the command documented in the template. The template is for development only and is intentionally not a usable production configuration.
 

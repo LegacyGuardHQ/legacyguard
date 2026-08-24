@@ -44,7 +44,7 @@ Frontend code lives under `frontend/src`. Reuse the authenticated API client, qu
 
 ### CI and validation
 
-Pull requests to `master` run separate backend and frontend GitHub Actions workflows. Backend CI installs `backend/requirements.txt` and runs `python -m pytest`. Frontend CI uses Node 18, runs `npm ci`, `npm test`, and `npm run build`.
+Pull requests to `master` run separate backend and frontend GitHub Actions workflows. Backend test jobs install `backend/requirements-test.txt` and run `python -m pytest`; runtime-only jobs install `backend/requirements.txt`. Frontend CI uses Node 18, runs `npm ci`, `npm test`, and `npm run build`.
 
 ## Privacy, security, and authorization rules
 
