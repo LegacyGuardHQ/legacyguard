@@ -3,13 +3,22 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database.connection import SessionLocal
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
-from app.models.document import DOCUMENT_STATUS_ACTIVE, DOCUMENT_VERIFICATION_UNKNOWN, Document
+from app.models.document import (
+    DOCUMENT_STATUS_ACTIVE,
+    DOCUMENT_STORAGE_BACKEND_LOCAL,
+    DOCUMENT_STORAGE_FAILED,
+    DOCUMENT_STORAGE_PENDING,
+    DOCUMENT_STORAGE_STORED,
+    DOCUMENT_VERIFICATION_UNKNOWN,
+    Document,
+)
 from app.models.user import User
 from app.schemas.documents import (
     DocumentCreate,
@@ -25,13 +34,12 @@ from app.services.discovery_orchestrator import (
     DiscoveryScanExecutor,
 )
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
-from app.services.document_storage import DocumentStorageError, LocalDocumentStorage
+from app.services.document_storage import DocumentStorage, DocumentStorageError, LocalDocumentStorage
 from app.services.document_storage_config import get_default_document_storage_root
 from app.services.document_validation import (
     MAX_DOCUMENT_BYTES,
     DocumentValidationError,
     MalwareScanner,
-    calculate_checksum_sha256,
     validate_document_size,
     validate_extension_and_mime,
     validate_magic_bytes,
@@ -43,7 +51,7 @@ malware_scanner: MalwareScanner | None = None
 UPLOAD_READ_CHUNK_BYTES = 64 * 1024
 
 
-def _build_document_storage() -> LocalDocumentStorage:
+def _build_document_storage() -> DocumentStorage:
     return LocalDocumentStorage(get_default_document_storage_root())
 
 
@@ -202,6 +210,65 @@ def _validate_document_upload_lifecycle(db: Session, document: Document, user_id
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Document already has uploaded content")
 
 
+def _claim_upload_attempt(db: Session, document: Document) -> str:
+    attempt_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    claimed = (
+        db.query(Document)
+        .filter(
+            Document.id == document.id,
+            Document.user_id == document.user_id,
+            Document.storage_reference_encrypted.is_(None),
+            Document.encryption_key_reference_encrypted.is_(None),
+            or_(
+                and_(Document.storage_state == DOCUMENT_STORAGE_PENDING, Document.upload_attempt_id.is_(None)),
+                Document.storage_state == DOCUMENT_STORAGE_FAILED,
+            ),
+        )
+        .update(
+            {
+                Document.upload_attempt_id: attempt_id,
+                Document.storage_state: DOCUMENT_STORAGE_PENDING,
+                Document.storage_state_updated_at: now,
+                Document.storage_error_code: None,
+            },
+            synchronize_session=False,
+        )
+    )
+    if claimed != 1:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Document upload is already claimed or completed")
+    try:
+        db.commit()
+        db.refresh(document)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to claim document upload", extra={"document_id": document.id})
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
+    return attempt_id
+
+
+def _mark_upload_failed(db: Session, document_id: str, attempt_id: str, error_code: str) -> None:
+    db.rollback()
+    (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.upload_attempt_id == attempt_id,
+            Document.storage_state == DOCUMENT_STORAGE_PENDING,
+        )
+        .update(
+            {
+                Document.storage_state: DOCUMENT_STORAGE_FAILED,
+                Document.storage_state_updated_at: datetime.now(timezone.utc),
+                Document.storage_error_code: error_code,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+
+
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def create_document_metadata(
     payload: DocumentCreate,
@@ -234,6 +301,9 @@ def create_document_metadata(
         updated_at=now,
         created_by=current_user.id,
         modified_by=current_user.id,
+        storage_backend=DOCUMENT_STORAGE_BACKEND_LOCAL,
+        storage_state=DOCUMENT_STORAGE_PENDING,
+        storage_state_updated_at=now,
     )
     document.set_description(payload.description)
     document.storage_reference = None
@@ -292,30 +362,41 @@ async def upload_encrypted_document_content(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
 
     storage_reference: str | None = None
+    attempt_id = _claim_upload_attempt(db, document)
     try:
         storage_reference = document_storage.save_encrypted(document.id, encrypted.encrypted_bytes)
         now = datetime.now(timezone.utc)
         document.original_filename = filename
         document.mime_type = file.content_type
         document.file_size = len(content)
-        document.checksum_sha256 = calculate_checksum_sha256(content)
+        # Retain the legacy column for migration compatibility without creating
+        # a new global plaintext fingerprint.
+        document.checksum_sha256 = None
+        document.ciphertext_sha256 = encrypted.checksum_sha256
+        document.ciphertext_size = len(encrypted.encrypted_bytes)
         document.set_storage_reference(storage_reference)
         document.encryption_key_reference_encrypted = encrypted.encrypted_key_reference
         document.content_encryption_version = encrypted.content_encryption_version
+        document.storage_backend = DOCUMENT_STORAGE_BACKEND_LOCAL
+        document.storage_state = DOCUMENT_STORAGE_STORED
+        document.storage_state_updated_at = now
+        document.storage_error_code = None
+        document.master_key_id = settings.document_master_key_id
         document.modified_by = current_user.id
         document.updated_at = now
         db.commit()
         db.refresh(document)
     except DocumentStorageError as exc:
-        db.rollback()
+        _mark_upload_failed(db, document.id, attempt_id, "STORAGE_WRITE_FAILED")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document storage failed") from exc
     except Exception as exc:
         db.rollback()
         if storage_reference is not None:
             try:
-                document_storage.delete_permanently(document.id)
+                document_storage.delete_permanently(storage_reference)
             except Exception:
                 logger.exception("Failed to remove orphaned encrypted document content", extra={"document_id": document.id})
+        _mark_upload_failed(db, document.id, attempt_id, "DATABASE_COMMIT_FAILED")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
 
     try:
@@ -340,7 +421,6 @@ async def upload_encrypted_document_content(
         original_filename=document.original_filename,
         mime_type=document.mime_type,
         file_size=document.file_size,
-        checksum_sha256=document.checksum_sha256,
         upload_status="COMPLETED",
         updated_at=document.updated_at,
         discovery_scan=discovery_scan,

@@ -33,6 +33,7 @@ Optional:
 
 - DEBUG
 - DOCUMENT_STORAGE_ROOT
+- DOCUMENT_MASTER_KEY_ID (non-secret identifier for the current document master key; defaults to `legacy-current-v1`)
 - ACCESS_TOKEN_EXPIRE_MINUTES
 - REFRESH_TOKEN_EXPIRE_DAYS
 - DISCOVERY_STALE_SCAN_THRESHOLD_SECONDS
@@ -133,6 +134,12 @@ the backend suite against PostgreSQL 16 on every pull request.
 - degraded readiness returns 503 and should be logged as a safe operational event without exposing internals
 
 ## Backup and restore
+
+`LocalDocumentStorage` remains intended for development, tests, and synthetic
+single-instance validation. A production object-storage adapter, coordinated
+blob/database backup, and production key recovery are not implemented yet. The
+document storage production blocker therefore remains open and real sensitive
+documents must not be admitted.
 
 Back up:
 

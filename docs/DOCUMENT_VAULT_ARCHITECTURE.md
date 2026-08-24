@@ -702,3 +702,38 @@ Future implementation tests should cover:
 9. Add audit logging that excludes sensitive metadata.
 10. Add malware scanning/quarantine integration before production document uploads.
 11. Add comprehensive tests for ownership, encryption, validation, lifecycle, and response redaction.
+
+## 13. Transitional Provider-Neutral Storage State
+
+The provider-neutral hardening layer uses three database-authoritative states:
+
+- `PENDING`: metadata exists without committed content, or one atomically claimed upload attempt is in progress.
+- `STORED`: encrypted content and its database metadata are committed. This is the transitional Discovery-eligible state and does **not** mean malware scanning occurred.
+- `FAILED`: the current upload attempt failed and may be atomically replaced by a retry.
+
+`SCANNING`, `CLEAN`, `QUARANTINED`, and `REJECTED` are deliberately deferred
+until malware scanning is implemented. At that point, Discovery eligibility
+must move from transitional `STORED` to the approved clean state.
+
+Each successful new upload records an opaque UUID attempt ID, ciphertext SHA-256,
+ciphertext size, storage backend, encrypted backend-neutral locator, encryption
+format, and non-secret `master_key_id`. The identifier selects which configured
+master key wrapped the per-document DEK; it is not key material. Existing single
+`ENCRYPTION_KEY` behavior remains unchanged, and no rotation is implemented by
+this state model.
+
+The decrypted persisted locator is authoritative for blob reads, existence
+checks, archival, and deletion. The local backend currently returns a validated
+relative locator beneath its configured root; a future object backend may return
+an arbitrary opaque object key that cannot be derived from the document UUID.
+`document_id` remains a cryptographic and authorization identifier, not a storage
+address, and locators are never public API identifiers.
+
+The legacy plaintext `checksum_sha256` column is retained for additive migration
+and rollback compatibility, but new uploads do not populate it and API responses
+do not expose it. Ciphertext SHA-256 plus Fernet authentication provide the new
+storage-integrity path without creating a global plaintext document fingerprint.
+
+`LocalDocumentStorage` remains development-oriented. Object storage, durable
+outbox/reconciliation, coordinated backup/restore and key recovery, deployment
+monitoring, and malware scanning remain required before real-data production use.

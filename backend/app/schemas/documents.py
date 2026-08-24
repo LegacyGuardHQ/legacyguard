@@ -137,7 +137,6 @@ class DocumentUploadResponse(BaseModel):
     original_filename: str
     mime_type: str
     file_size: int
-    checksum_sha256: str
     upload_status: DocumentUploadStatus
     updated_at: datetime
     discovery_scan: DocumentUploadDiscoveryScanResponse | None = None
