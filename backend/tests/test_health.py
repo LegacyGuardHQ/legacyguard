@@ -16,6 +16,8 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.main import app
+from app.api import health as health_api
+from app.services.document_storage import StorageReadiness
 
 client = TestClient(app)
 
@@ -56,6 +58,26 @@ def test_ready_endpoint_reports_degraded_when_dependencies_fail() -> None:
         "status": "degraded",
         "checks": {"database": "failed", "storage": "failed", "migrations": "failed"},
     }
+
+
+def test_storage_readiness_uses_non_destructive_backend_contract() -> None:
+    with patch.object(
+        health_api.document_storage,
+        "check_readiness",
+        return_value=StorageReadiness(configuration_valid=True, reachable=True, write_ready=None),
+    ) as readiness:
+        assert health_api.check_storage_ready() is True
+
+    readiness.assert_called_once_with()
+
+
+def test_storage_readiness_fails_closed_on_known_non_writable_backend() -> None:
+    with patch.object(
+        health_api.document_storage,
+        "check_readiness",
+        return_value=StorageReadiness(configuration_valid=True, reachable=True, write_ready=False),
+    ):
+        assert health_api.check_storage_ready() is False
 
 
 def test_migration_readiness_reports_healthy_after_upgrade(tmp_path: Path) -> None:

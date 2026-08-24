@@ -25,8 +25,7 @@ def check_database_ready() -> bool:
 
 def check_storage_ready() -> bool:
     try:
-        document_storage.exists("00000000-0000-0000-0000-000000000000")
-        return True
+        return document_storage.check_readiness().ready
     except Exception:
         log_event("ready_check_failed", event_category="health", severity="warning", dependency="storage")
         return False

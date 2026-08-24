@@ -25,7 +25,7 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
-from app.models.document import Document
+from app.models.document import DOCUMENT_STORAGE_PENDING, DOCUMENT_STORAGE_STORED, Document
 from app.models.user import User
 from app.services.document_content_encryption import document_content_encryption_service
 from app.services.discovery_orchestrator import (
@@ -40,12 +40,12 @@ class MemoryStorage:
     def __init__(self, encrypted_bytes: bytes) -> None:
         self.encrypted_bytes = encrypted_bytes
 
-    def read_encrypted(self, document_id: str) -> bytes:
+    def read_encrypted(self, document_id: str, **kwargs) -> bytes:
         return self.encrypted_bytes
 
 
 class FailingStorage:
-    def read_encrypted(self, document_id: str) -> bytes:
+    def read_encrypted(self, document_id: str, **kwargs) -> bytes:
         raise RuntimeError("storage failure")
 
 
@@ -84,6 +84,9 @@ def _create_document_with_encrypted_content(*, mime_type: str, plaintext: bytes)
             document_name="Statement",
             mime_type=mime_type,
             encryption_key_reference_encrypted=encrypted.encrypted_key_reference,
+            storage_state=DOCUMENT_STORAGE_STORED,
+            ciphertext_sha256=encrypted.checksum_sha256,
+            ciphertext_size=len(encrypted.encrypted_bytes),
         )
         db.add_all([user, document])
         db.commit()
@@ -153,6 +156,7 @@ def test_missing_key_and_storage_failure_are_not_unsupported_extraction() -> Non
         document_type="ACCOUNT_STATEMENT",
         document_name="Missing key",
         mime_type="text/plain",
+        storage_state=DOCUMENT_STORAGE_STORED,
     )
     missing_key_provider = EncryptedDocumentTextProvider(storage=MemoryStorage(b"unused"))
     with pytest.raises(DiscoveryOrchestrationError) as missing_key_error:
@@ -168,6 +172,21 @@ def test_missing_key_and_storage_failure_are_not_unsupported_extraction() -> Non
         assert not isinstance(storage_error.value, UnsupportedDocumentExtractionError)
     finally:
         db.close()
+
+
+def test_pending_document_is_not_discovery_eligible() -> None:
+    document = Document(
+        id="550e8400-e29b-41d4-a716-446655440009",
+        user_id="user-1",
+        document_type="ACCOUNT_STATEMENT",
+        document_name="Pending",
+        mime_type="text/plain",
+        storage_state=DOCUMENT_STORAGE_PENDING,
+        encryption_key_reference_encrypted="not-used",
+    )
+
+    with pytest.raises(DiscoveryOrchestrationError, match="eligible storage state"):
+        EncryptedDocumentTextProvider(storage=MemoryStorage(b"unused")).get_text(document)
 
 
 def test_decryption_and_unexpected_extraction_failures_are_not_unsupported() -> None:

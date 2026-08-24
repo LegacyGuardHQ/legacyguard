@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
@@ -330,6 +330,7 @@ def test_owner_uploads_valid_pdf_and_response_is_private() -> None:
     response = _upload_document(token, document_id, content=plaintext)
 
     assert response.status_code == 200
+    assert "checksum_sha256" not in response.json()
     payload = response.json()
     assert payload["id"] == document_id
     assert payload["original_filename"] == "upload.pdf"
@@ -407,7 +408,12 @@ def test_upload_stores_encrypted_bytes_and_recoverable_plaintext() -> None:
         assert saved.encryption_key_reference_encrypted is not None
         assert saved.encryption_key_reference_encrypted != "client-key"
         assert document_content_encryption_service.decrypt(document_id, encrypted_bytes, saved.encryption_key_reference_encrypted) == plaintext
-        assert saved.checksum_sha256 == __import__("hashlib").sha256(plaintext).hexdigest()
+        assert saved.checksum_sha256 is None
+        assert saved.ciphertext_sha256 == __import__("hashlib").sha256(encrypted_bytes).hexdigest()
+        assert saved.ciphertext_size == len(encrypted_bytes)
+        assert saved.storage_state == "STORED"
+        assert saved.upload_attempt_id is not None
+        assert saved.master_key_id == "legacy-current-v1"
     finally:
         db.close()
         documents_api.document_storage.delete_permanently(document_id)
@@ -426,6 +432,28 @@ def test_upload_rejects_client_supplied_extra_fields_and_reupload_conflict() -> 
     assert supplied.status_code == 200
     assert first.status_code == 409
     assert second.status_code == 409
+
+
+def test_database_claim_prevents_two_stale_sessions_from_uploading_same_document() -> None:
+    from app.api.documents import _claim_upload_attempt
+
+    token = _token("upload-claim-race@example.com")
+    document_id = _post_document(token).json()["id"]
+    first_db = SessionLocal()
+    second_db = SessionLocal()
+    try:
+        first_document = first_db.query(Document).filter(Document.id == document_id).one()
+        second_document = second_db.query(Document).filter(Document.id == document_id).one()
+
+        attempt_id = _claim_upload_attempt(first_db, first_document)
+        with pytest.raises(HTTPException) as conflict:
+            _claim_upload_attempt(second_db, second_document)
+
+        assert conflict.value.status_code == 409
+        assert first_db.query(Document).filter(Document.id == document_id).one().upload_attempt_id == attempt_id
+    finally:
+        first_db.close()
+        second_db.close()
 
 
 def test_upload_storage_failure_does_not_commit_metadata(monkeypatch) -> None:
@@ -449,6 +477,9 @@ def test_upload_storage_failure_does_not_commit_metadata(monkeypatch) -> None:
         assert saved.storage_reference_encrypted is None
         assert saved.encryption_key_reference_encrypted is None
         assert saved.checksum_sha256 is None
+        assert saved.storage_state == "FAILED"
+        assert saved.storage_error_code == "STORAGE_WRITE_FAILED"
+        assert saved.upload_attempt_id is not None
     finally:
         db.close()
 
@@ -487,15 +518,29 @@ def test_upload_database_failure_after_storage_triggers_cleanup(monkeypatch) -> 
     monkeypatch.setattr(documents_api.document_storage, "save_encrypted", save_and_mark)
     monkeypatch.setattr(documents_api.document_storage, "delete_permanently", delete_and_track)
 
-    # Force the next commit in the route to fail by patching Session.commit globally after metadata creation is complete.
-    def always_fail_commit(self):
-        raise RuntimeError("db fail")
+    # The upload claim commits first; fail the following metadata commit and
+    # allow the failure-state commit to succeed.
+    commit_calls = {"count": 0}
 
-    monkeypatch.setattr(type(SessionLocal()), "commit", always_fail_commit, raising=False)
+    def fail_upload_metadata_commit(self):
+        commit_calls["count"] += 1
+        if commit_calls["count"] == 2:
+            raise RuntimeError("db fail")
+        return original_commit(self)
+
+    monkeypatch.setattr(type(SessionLocal()), "commit", fail_upload_metadata_commit, raising=False)
     response = _upload_document(token, document_id)
 
     assert response.status_code == 500
     assert deleted["called"] is True
+    db = SessionLocal()
+    try:
+        saved = db.query(Document).filter(Document.id == document_id).one()
+        assert saved.storage_state == "FAILED"
+        assert saved.storage_error_code == "DATABASE_COMMIT_FAILED"
+        assert saved.storage_reference_encrypted is None
+    finally:
+        db.close()
 
 
 def test_upload_triggers_discovery_scan_for_text_document() -> None:
@@ -926,7 +971,7 @@ def test_upload_survives_background_scheduling_failure(monkeypatch) -> None:
         db = SessionLocal()
         try:
             saved = db.query(Document).filter(Document.id == document_id).one()
-            assert saved.checksum_sha256 == hashlib.sha256(plaintext).hexdigest()
+            assert saved.checksum_sha256 is None
             assert saved.encryption_key_reference_encrypted is not None
             scan = db.query(DiscoveryScan).one()
             assert scan.status == DISCOVERY_SCAN_STATUS_FAILED
@@ -973,7 +1018,7 @@ def test_upload_survives_scan_creation_audit_failure_without_scheduling(monkeypa
         db = SessionLocal()
         try:
             saved = db.query(Document).filter(Document.id == document_id).one()
-            assert saved.checksum_sha256 == hashlib.sha256(plaintext).hexdigest()
+            assert saved.checksum_sha256 is None
             assert saved.encryption_key_reference_encrypted is not None
             assert saved.original_filename == "statement.txt"
             assert saved.mime_type == "text/plain"
@@ -1017,7 +1062,7 @@ def test_upload_still_succeeds_when_post_upload_discovery_raises(monkeypatch) ->
         db = SessionLocal()
         try:
             saved = db.query(Document).filter(Document.id == document_id).one()
-            assert saved.checksum_sha256 == hashlib.sha256(plaintext).hexdigest()
+            assert saved.checksum_sha256 is None
             assert saved.encryption_key_reference_encrypted is not None
             assert saved.original_filename == "statement.txt"
             assert saved.mime_type == "text/plain"

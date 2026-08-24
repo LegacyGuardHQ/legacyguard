@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     document_storage_root: str | None = None
+    document_master_key_id: str = Field(default="legacy-current-v1", pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
     discovery_stale_scan_threshold_seconds: int | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

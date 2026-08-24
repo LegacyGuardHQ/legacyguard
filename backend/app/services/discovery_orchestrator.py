@@ -29,7 +29,7 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
-from app.models.document import Document
+from app.models.document import DOCUMENT_STORAGE_STORED, Document
 from app.services.audit import log_event
 from app.services.discovery_engine import DiscoveryEngine
 from app.services.discovery_privacy import DiscoveryPrivacyService
@@ -39,7 +39,7 @@ from app.services.document_extraction import (
     DocumentExtractionService,
     ExtractedDocumentText,
 )
-from app.services.document_storage import LocalDocumentStorage
+from app.services.document_storage import DocumentStorage, LocalDocumentStorage
 from app.services.document_storage_config import get_default_document_storage_root
 
 DISCOVERY_STARTED = "discovery_started"
@@ -104,18 +104,24 @@ class DocumentTextProvider(Protocol):
 class EncryptedDocumentTextProvider:
     def __init__(
         self,
-        storage: LocalDocumentStorage | None = None,
+        storage: DocumentStorage | None = None,
         extraction_service: DocumentExtractionService | None = None,
     ) -> None:
         self.storage = storage or LocalDocumentStorage(get_default_document_storage_root())
         self.extraction_service = extraction_service or DocumentExtractionService()
 
     def get_text(self, document: Document) -> str:
+        if document.storage_state != DOCUMENT_STORAGE_STORED:
+            raise DiscoveryOrchestrationError("Document content is not in an eligible storage state")
         encrypted_key_reference = document.encryption_key_reference_encrypted
         if encrypted_key_reference is None:
             raise DiscoveryOrchestrationError("Document content is unavailable")
 
-        encrypted_bytes = self.storage.read_encrypted(document.id)
+        encrypted_bytes = self.storage.read_encrypted(
+            document.id,
+            expected_sha256=document.ciphertext_sha256,
+            expected_size=document.ciphertext_size,
+        )
         plaintext = document_content_encryption_service.decrypt(
             document.id,
             encrypted_bytes,
