@@ -38,7 +38,7 @@ from app.models.discovery_scan_document import (
 )
 from app.models.document import Document
 from app.services.discovery_orchestrator import DISCOVERY_FAILED, DiscoveryOrchestrator, EncryptedDocumentTextProvider
-from app.services.document_storage import DocumentIntegrityError
+from app.services.document_storage import DocumentIntegrityError, StorageWriteResult
 from app.services.document_validation import DocumentValidationError, MAX_DOCUMENT_BYTES
 from app.services.rate_limit import rate_limiter
 
@@ -110,15 +110,16 @@ def _storage_locator(document_id: str) -> str:
 
 
 class OpaqueMemoryStorage:
+    backend_name = "LOCAL"
     locator = "opaque/random/upload-attempt-a9f7.lgdoc"
 
     def __init__(self) -> None:
         self.blobs: dict[str, bytes] = {}
 
-    def save_encrypted(self, document_id: str, encrypted_bytes: bytes) -> str:
+    def save_encrypted(self, document_id: str, encrypted_bytes: bytes) -> StorageWriteResult:
         assert document_id not in self.locator
         self.blobs[self.locator] = encrypted_bytes
-        return self.locator
+        return StorageWriteResult(locator=self.locator, provider_version="test-version-1")
 
     def read_encrypted(self, locator: str, *, expected_sha256=None, expected_size=None) -> bytes:
         encrypted_bytes = self.blobs[locator]
@@ -595,7 +596,7 @@ def test_upload_database_failure_after_storage_triggers_cleanup(monkeypatch) -> 
     original_save = documents_api.document_storage.save_encrypted
     original_delete = documents_api.document_storage.delete_permanently
 
-    def save_and_mark(document_id: str, encrypted_bytes: bytes) -> str:
+    def save_and_mark(document_id: str, encrypted_bytes: bytes) -> StorageWriteResult:
         return original_save(document_id, encrypted_bytes)
 
     def delete_and_track(locator: str) -> None:

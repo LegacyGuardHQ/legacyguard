@@ -7,7 +7,7 @@ This milestone keeps LegacyGuard on the existing single-instance architecture:
 - one backend service
 - one frontend build
 - one PostgreSQL database (managed service or persistent self-hosted volume)
-- one persistent document-storage volume
+- one private persistent document-storage backend
 - environment-based configuration and secrets
 
 ## Prerequisites
@@ -15,7 +15,7 @@ This milestone keeps LegacyGuard on the existing single-instance architecture:
 - Python 3.12 runtime
 - Node.js 24 for frontend builds
 - PostgreSQL 16 or another currently supported PostgreSQL release
-- a persistent filesystem or object-store mount for document storage
+- a private S3-compatible object store for production document storage
 - a secret-management process for runtime secrets
 
 ## Production environment variables
@@ -32,7 +32,17 @@ Required:
 Optional:
 
 - DEBUG
+- DOCUMENT_STORAGE_BACKEND (`LOCAL` by default; use `OBJECT` for production object storage)
 - DOCUMENT_STORAGE_ROOT
+- DOCUMENT_OBJECT_BUCKET (required when the backend is `OBJECT`)
+- DOCUMENT_OBJECT_PREFIX (default: `legacyguard`)
+- DOCUMENT_OBJECT_REGION
+- DOCUMENT_OBJECT_ENDPOINT_URL (for S3-compatible providers; HTTPS is required outside development/testing)
+- DOCUMENT_OBJECT_ADDRESSING_STYLE (`auto`, `virtual`, or `path`; default: `auto`)
+- DOCUMENT_OBJECT_CONNECT_TIMEOUT_SECONDS (default: 5)
+- DOCUMENT_OBJECT_READ_TIMEOUT_SECONDS (default: 30)
+- DOCUMENT_OBJECT_MAX_ATTEMPTS (default: 3)
+- DOCUMENT_OBJECT_ACCESS_KEY_ID, DOCUMENT_OBJECT_SECRET_ACCESS_KEY, and DOCUMENT_OBJECT_SESSION_TOKEN (optional explicit credentials; prefer the provider SDK credential chain)
 - DOCUMENT_MASTER_KEY_ID (non-secret identifier for the current document master key; defaults to `legacy-current-v1`)
 - ACCESS_TOKEN_EXPIRE_MINUTES
 - REFRESH_TOKEN_EXPIRE_DAYS
@@ -100,6 +110,33 @@ Generate a Fernet key:
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
+## S3-compatible document storage
+
+Set `DOCUMENT_STORAGE_BACKEND=OBJECT` and configure a private bucket. The adapter
+stores only application-encrypted ciphertext under
+`<prefix>/documents/<document UUID>/<random UUID>.lgdoc`; it never creates public
+URLs or returns bucket details through the API. Keep public access blocked, grant
+the runtime identity only the required bucket/object operations, require TLS, and
+use short-lived workload credentials or instance roles where the provider supports
+them. Explicit access-key settings are optional and must come from the deployment
+secret store, never source control.
+
+For AWS S3, omit `DOCUMENT_OBJECT_ENDPOINT_URL` and configure the region. For
+Cloudflare R2, set the account-specific HTTPS S3 endpoint and use the provider's
+documented region value. For Backblaze B2, use its region-specific HTTPS S3
+endpoint. Select path-style addressing only when the provider requires it.
+
+LegacyGuard verifies each completed write with an exact-key `HEAD`, ciphertext
+length, and ciphertext SHA-256 metadata, and verifies ciphertext again on reads
+against database-authoritative size and SHA-256 values. A random object key and
+conditional create prevent accidental overwrite. Provider object version IDs are
+recorded when returned, but the current lifecycle operates on the exact object key.
+If bucket versioning is enabled, deletion may create a delete marker rather than
+erasing older versions; retention and permanent-version deletion therefore remain
+an operator policy responsibility. Provider-side encryption and versioning are
+useful defense in depth but do not replace LegacyGuard application encryption,
+authorization, backup coordination, or key recovery.
+
 ## Deployment sequence
 
 1. Provision PostgreSQL and persistent document storage.
@@ -136,10 +173,11 @@ the backend suite against PostgreSQL 16 on every pull request.
 ## Backup and restore
 
 `LocalDocumentStorage` remains intended for development, tests, and synthetic
-single-instance validation. A production object-storage adapter, coordinated
-blob/database backup, and production key recovery are not implemented yet. The
-document storage production blocker therefore remains open and real sensitive
-documents must not be admitted.
+single-instance validation. The S3-compatible adapter supplies durable encrypted
+object persistence, but coordinated blob/database backup and restore, production
+key recovery, malware scanning/quarantine, deployment monitoring, and an approved
+retention policy are not implemented yet. The document-storage production blocker
+therefore remains open and real sensitive documents must not be admitted.
 
 Back up:
 

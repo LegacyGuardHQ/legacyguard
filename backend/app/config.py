@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlsplit
 
 from pydantic import Field, ValidationError, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +26,18 @@ class Settings(BaseSettings):
     environment: str = "development"
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     document_storage_root: str | None = None
+    document_storage_backend: str = Field(default="LOCAL", pattern=r"^(LOCAL|OBJECT)$")
+    document_object_bucket: str | None = Field(default=None, min_length=3, max_length=63)
+    document_object_prefix: str = Field(default="legacyguard", max_length=256)
+    document_object_region: str | None = Field(default=None, max_length=64)
+    document_object_endpoint_url: str | None = None
+    document_object_access_key_id: str | None = None
+    document_object_secret_access_key: str | None = None
+    document_object_session_token: str | None = None
+    document_object_addressing_style: str = Field(default="auto", pattern=r"^(auto|virtual|path)$")
+    document_object_connect_timeout_seconds: int = Field(default=5, ge=1, le=60)
+    document_object_read_timeout_seconds: int = Field(default=30, ge=1, le=300)
+    document_object_max_attempts: int = Field(default=3, ge=1, le=10)
     document_master_key_id: str = Field(default="legacy-current-v1", pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
     discovery_stale_scan_threshold_seconds: int | None = None
 
@@ -34,6 +47,7 @@ class Settings(BaseSettings):
     def validate_required_keys(self) -> "Settings":
         normalized_environment = self.environment.lower()
         self.environment = normalized_environment
+        self.document_storage_backend = self.document_storage_backend.upper()
 
         if normalized_environment != "testing":
             for field_name in ("secret_key", "encryption_key", "jwt_secret"):
@@ -62,6 +76,37 @@ class Settings(BaseSettings):
                 raise ValueError("secret_key must include letters and digits")
             if not re.search(r"[A-Za-z]", self.jwt_secret) or not re.search(r"\d", self.jwt_secret):
                 raise ValueError("jwt_secret must include letters and digits")
+
+        if self.document_storage_backend == "OBJECT":
+            if self.document_object_bucket is None:
+                raise ValueError("document_object_bucket is required for OBJECT storage")
+            if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*[a-z0-9]", self.document_object_bucket):
+                raise ValueError("document_object_bucket must be a valid S3-compatible bucket name")
+            normalized_prefix = self.document_object_prefix.strip("/")
+            if not normalized_prefix or any(
+                not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", part) or part in {".", ".."}
+                for part in normalized_prefix.split("/")
+            ):
+                raise ValueError("document_object_prefix must be a safe object-key prefix")
+            self.document_object_prefix = normalized_prefix
+
+            explicit_credentials = (
+                self.document_object_access_key_id,
+                self.document_object_secret_access_key,
+            )
+            if any(explicit_credentials) and not all(explicit_credentials):
+                raise ValueError("object access key id and secret access key must be configured together")
+            if self.document_object_session_token and not all(explicit_credentials):
+                raise ValueError("object session token requires explicit access key credentials")
+
+            if self.document_object_endpoint_url:
+                endpoint = urlsplit(self.document_object_endpoint_url)
+                if endpoint.scheme not in {"http", "https"} or not endpoint.hostname:
+                    raise ValueError("document_object_endpoint_url must be an absolute HTTP(S) URL")
+                if endpoint.username or endpoint.password or endpoint.query or endpoint.fragment:
+                    raise ValueError("document_object_endpoint_url must not contain credentials, query, or fragment")
+                if normalized_environment in {"production", "staging"} and endpoint.scheme != "https":
+                    raise ValueError("object storage endpoint must use HTTPS outside development/testing")
 
         return self
 

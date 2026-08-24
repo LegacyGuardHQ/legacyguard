@@ -5,12 +5,12 @@ from sqlalchemy import text
 from app.config import settings
 from app.database.connection import SessionLocal
 from app.services.alembic_readiness import check_migration_readiness
-from app.services.document_storage import LocalDocumentStorage
+from app.services.document_storage_factory import build_document_storage
 from app.services.operational_logging import log_event
 
 router = APIRouter()
 
-document_storage = LocalDocumentStorage(settings.document_storage_root or "private_storage/documents")
+document_storage = build_document_storage(settings)
 
 
 def check_database_ready() -> bool:

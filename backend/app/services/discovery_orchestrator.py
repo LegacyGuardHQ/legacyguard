@@ -39,8 +39,8 @@ from app.services.document_extraction import (
     DocumentExtractionService,
     ExtractedDocumentText,
 )
-from app.services.document_storage import DocumentStorage, LocalDocumentStorage
-from app.services.document_storage_config import get_default_document_storage_root
+from app.services.document_storage import DocumentStorage
+from app.services.document_storage_factory import build_document_storage
 
 DISCOVERY_STARTED = "discovery_started"
 DISCOVERY_COMPLETED = "discovery_completed"
@@ -107,7 +107,7 @@ class EncryptedDocumentTextProvider:
         storage: DocumentStorage | None = None,
         extraction_service: DocumentExtractionService | None = None,
     ) -> None:
-        self.storage = storage or LocalDocumentStorage(get_default_document_storage_root())
+        self.storage = storage or build_document_storage()
         self.extraction_service = extraction_service or DocumentExtractionService()
 
     def get_text(self, document: Document) -> str:

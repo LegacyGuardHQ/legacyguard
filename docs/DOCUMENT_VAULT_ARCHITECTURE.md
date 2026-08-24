@@ -723,9 +723,12 @@ master key wrapped the per-document DEK; it is not key material. Existing single
 this state model.
 
 The decrypted persisted locator is authoritative for blob reads, existence
-checks, archival, and deletion. The local backend currently returns a validated
-relative locator beneath its configured root; a future object backend may return
-an arbitrary opaque object key that cannot be derived from the document UUID.
+checks, archival, and deletion. The local backend returns a validated relative
+locator beneath its configured root. The S3-compatible object backend returns a
+validated key under `<prefix>/documents/<document UUID>/<random UUID>.lgdoc`;
+the random final component makes it unsuitable for derivation from the document
+UUID alone. The bucket and endpoint remain configuration, not persisted locator
+content.
 `document_id` remains a cryptographic and authorization identifier, not a storage
 address, and locators are never public API identifiers.
 
@@ -734,6 +737,15 @@ and rollback compatibility, but new uploads do not populate it and API responses
 do not expose it. Ciphertext SHA-256 plus Fernet authentication provide the new
 storage-integrity path without creating a global plaintext document fingerprint.
 
-`LocalDocumentStorage` remains development-oriented. Object storage, durable
-outbox/reconciliation, coordinated backup/restore and key recovery, deployment
-monitoring, and malware scanning remain required before real-data production use.
+`LocalDocumentStorage` remains development-oriented. `ObjectDocumentStorage`
+uses private S3-compatible APIs, conditional create, bounded SDK retries, and an
+exact-key `HEAD` reconciliation check after an ambiguous write. It records a
+provider version ID when one is returned and verifies ciphertext size and SHA-256
+metadata before declaring the write stored. Database-authoritative ciphertext
+size and SHA-256 are still verified during reads; native provider integrity and
+encryption controls are supplementary.
+
+Durable outbox/reconciliation beyond the exact-key ambiguous-write check,
+coordinated backup/restore and key recovery, deployment monitoring, retention and
+version-deletion policy, and malware scanning remain required before real-data
+production use.

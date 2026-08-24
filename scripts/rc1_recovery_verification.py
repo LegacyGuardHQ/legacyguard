@@ -119,7 +119,7 @@ def seed_test_data(env: dict[str, str]) -> tuple[str, str, str]:
     relative_path = storage.save_encrypted(
         document_id,
         fernet.encrypt(b"Temporary RC1 recovery verification document"),
-    )
+    ).locator
     return marker_id, document_id, relative_path
 
 

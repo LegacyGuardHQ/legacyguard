@@ -353,7 +353,7 @@ def test_local_document_storage_uses_opaque_paths_and_rejects_traversal(tmp_path
     document_id = "550e8400-e29b-41d4-a716-446655440001"
     encrypted_bytes = b"encrypted bytes only"
 
-    reference = storage.save_encrypted(document_id, encrypted_bytes)
+    reference = storage.save_encrypted(document_id, encrypted_bytes).locator
 
     assert "550e8400" not in reference
     assert reference.endswith(".lgdoc")

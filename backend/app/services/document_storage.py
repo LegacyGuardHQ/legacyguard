@@ -29,9 +29,17 @@ class StorageReadiness:
         return self.configuration_valid and self.reachable and self.write_ready is not False
 
 
+@dataclass(frozen=True)
+class StorageWriteResult:
+    locator: str
+    provider_version: str | None = None
+
+
 class DocumentStorage(ABC):
+    backend_name: str
+
     @abstractmethod
-    def save_encrypted(self, document_id: str, encrypted_bytes: bytes) -> str:
+    def save_encrypted(self, document_id: str, encrypted_bytes: bytes) -> StorageWriteResult:
         raise NotImplementedError
 
     @abstractmethod
@@ -68,6 +76,8 @@ class DocumentStorage(ABC):
 
 
 class LocalDocumentStorage(DocumentStorage):
+    backend_name = "LOCAL"
+
     def __init__(self, root: str | Path = "private_storage/documents") -> None:
         self.root = Path(root).resolve()
         self.active_root = self.root / "active"
@@ -110,7 +120,7 @@ class LocalDocumentStorage(DocumentStorage):
             raise DocumentStorageError("Invalid document storage locator")
         return path
 
-    def save_encrypted(self, document_id: str, encrypted_bytes: bytes) -> str:
+    def save_encrypted(self, document_id: str, encrypted_bytes: bytes) -> StorageWriteResult:
         if not encrypted_bytes:
             raise DocumentStorageError("Encrypted document bytes are required")
         path = self._path_for(document_id)
@@ -134,7 +144,7 @@ class LocalDocumentStorage(DocumentStorage):
         finally:
             if temporary_path is not None:
                 temporary_path.unlink(missing_ok=True)
-        return str(path.relative_to(self.root))
+        return StorageWriteResult(locator=str(path.relative_to(self.root)))
 
     def read_encrypted(
         self,

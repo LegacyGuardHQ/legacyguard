@@ -10,10 +10,12 @@ bcrypt==4.0.1
 PyJWT==2.13.0
 cryptography==50.0.0
 python-multipart==0.0.32
+boto3==1.43.55
 
 # Development/test dependencies
 pytest==9.0.3
 pytest-cov==7.1.0
 httpx==0.28.1
+moto[server]==5.2.2
 
 # Security dependency baseline verified against GitHub advisories.

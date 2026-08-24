@@ -26,7 +26,7 @@ def storage(tmp_path) -> LocalDocumentStorage:
 def assert_storage_contract(storage: DocumentStorage) -> None:
     document_id = str(uuid.uuid4())
     content = b"contract-ciphertext"
-    locator = storage.save_encrypted(document_id, content)
+    locator = storage.save_encrypted(document_id, content).locator
 
     assert isinstance(locator, str) and locator
     assert storage.exists(locator) is True
@@ -53,7 +53,7 @@ def test_init_creates_active_and_archive_roots(storage) -> None:
 
 def test_save_and_read_round_trip(storage) -> None:
     document_id = str(uuid.uuid4())
-    relative = storage.save_encrypted(document_id, b"cipher-bytes")
+    relative = storage.save_encrypted(document_id, b"cipher-bytes").locator
 
     assert relative.startswith("active")
     assert storage.exists(relative) is True
@@ -63,7 +63,7 @@ def test_save_and_read_round_trip(storage) -> None:
 def test_read_verifies_ciphertext_hash_and_size(storage) -> None:
     document_id = str(uuid.uuid4())
     content = b"cipher-bytes"
-    locator = storage.save_encrypted(document_id, content)
+    locator = storage.save_encrypted(document_id, content).locator
 
     assert storage.read_encrypted(
         locator,
@@ -126,7 +126,7 @@ def test_exists_is_false_for_unknown_document(storage) -> None:
 
 def test_archive_moves_document_and_read_falls_back_to_archive(storage) -> None:
     document_id = str(uuid.uuid4())
-    locator = storage.save_encrypted(document_id, b"cipher-bytes")
+    locator = storage.save_encrypted(document_id, b"cipher-bytes").locator
 
     archived_locator = storage.archive(locator)
 
@@ -141,7 +141,7 @@ def test_archive_missing_document_raises(storage) -> None:
 
 def test_delete_permanently_removes_active_and_archived_copies(storage) -> None:
     document_id = str(uuid.uuid4())
-    locator = storage.save_encrypted(document_id, b"cipher-bytes")
+    locator = storage.save_encrypted(document_id, b"cipher-bytes").locator
     archived_locator = storage.archive(locator)
 
     storage.delete_permanently(archived_locator)
@@ -185,7 +185,7 @@ def test_locator_rejects_symlink_escape(storage, tmp_path) -> None:
 
 def test_wrong_locator_does_not_fall_back_to_document_identity(storage) -> None:
     document_id = str(uuid.uuid4())
-    locator = storage.save_encrypted(document_id, b"cipher-bytes")
+    locator = storage.save_encrypted(document_id, b"cipher-bytes").locator
 
     with pytest.raises(DocumentStorageError, match="not found"):
         storage.read_encrypted("active/wrong.lgdoc")

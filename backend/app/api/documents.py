@@ -12,7 +12,6 @@ from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
 from app.models.document import (
     DOCUMENT_STATUS_ACTIVE,
-    DOCUMENT_STORAGE_BACKEND_LOCAL,
     DOCUMENT_STORAGE_FAILED,
     DOCUMENT_STORAGE_PENDING,
     DOCUMENT_STORAGE_STORED,
@@ -34,8 +33,8 @@ from app.services.discovery_orchestrator import (
     DiscoveryScanExecutor,
 )
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
-from app.services.document_storage import DocumentStorage, DocumentStorageError, LocalDocumentStorage
-from app.services.document_storage_config import get_default_document_storage_root
+from app.services.document_storage import DocumentStorage, DocumentStorageError
+from app.services.document_storage_factory import build_document_storage
 from app.services.document_validation import (
     MAX_DOCUMENT_BYTES,
     DocumentValidationError,
@@ -52,7 +51,7 @@ UPLOAD_READ_CHUNK_BYTES = 64 * 1024
 
 
 def _build_document_storage() -> DocumentStorage:
-    return LocalDocumentStorage(get_default_document_storage_root())
+    return build_document_storage()
 
 
 document_storage = _build_document_storage()
@@ -301,7 +300,7 @@ def create_document_metadata(
         updated_at=now,
         created_by=current_user.id,
         modified_by=current_user.id,
-        storage_backend=DOCUMENT_STORAGE_BACKEND_LOCAL,
+        storage_backend=document_storage.backend_name,
         storage_state=DOCUMENT_STORAGE_PENDING,
         storage_state_updated_at=now,
     )
@@ -364,7 +363,8 @@ async def upload_encrypted_document_content(
     storage_reference: str | None = None
     attempt_id = _claim_upload_attempt(db, document)
     try:
-        storage_reference = document_storage.save_encrypted(document.id, encrypted.encrypted_bytes)
+        write_result = document_storage.save_encrypted(document.id, encrypted.encrypted_bytes)
+        storage_reference = write_result.locator
         now = datetime.now(timezone.utc)
         document.original_filename = filename
         document.mime_type = file.content_type
@@ -377,7 +377,8 @@ async def upload_encrypted_document_content(
         document.set_storage_reference(storage_reference)
         document.encryption_key_reference_encrypted = encrypted.encrypted_key_reference
         document.content_encryption_version = encrypted.content_encryption_version
-        document.storage_backend = DOCUMENT_STORAGE_BACKEND_LOCAL
+        document.storage_backend = document_storage.backend_name
+        document.storage_provider_version = write_result.provider_version
         document.storage_state = DOCUMENT_STORAGE_STORED
         document.storage_state_updated_at = now
         document.storage_error_code = None
