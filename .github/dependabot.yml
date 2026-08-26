@@ -26,9 +26,55 @@ updates:
       interval: monthly
     open-pull-requests-limit: 5
     groups:
-      frontend-dependencies:
+      frontend-typescript:
+        patterns:
+          - "typescript"
+          - "@typescript-eslint/*"
+        update-types:
+          - minor
+          - patch
+      frontend-react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+        update-types:
+          - minor
+          - patch
+      frontend-react-router:
+        patterns:
+          - "react-router"
+          - "react-router-dom"
+        update-types:
+          - minor
+          - patch
+      frontend-test-runtime:
+        patterns:
+          - "jsdom"
+          - "vitest"
+          - "@testing-library/*"
+        update-types:
+          - minor
+          - patch
+      frontend-tooling:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
+          - "@typescript-eslint/*"
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "react-router"
+          - "react-router-dom"
+          - "jsdom"
+          - "vitest"
+          - "@testing-library/*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
