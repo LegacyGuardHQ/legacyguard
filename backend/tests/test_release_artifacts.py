@@ -110,7 +110,7 @@ def test_prohibited_artifact_paths_are_rejected(tmp_path: Path, relative: str) -
 
 def test_actual_frontend_lockfile_nested_names_and_purls_are_correct() -> None:
     components = {component["name"]: component for component in release_artifacts.frontend_components()}
-    for name in ("lru-cache", "dom-accessibility-api", "rrweb-cssom"):
+    for name in ("lru-cache", "dom-accessibility-api", "css-tree"):
         assert name in components
         assert "/node_modules/" not in components[name]["name"]
         assert components[name]["purl"].startswith(f"pkg:npm/{name}@")
@@ -134,3 +134,4 @@ def test_generated_sboms_are_reproducible_and_path_free(tmp_path: Path) -> None:
         assert "onedrive" not in serialized
         assert "private_storage" not in serialized
         assert "recovery-bundles" not in serialized
+
