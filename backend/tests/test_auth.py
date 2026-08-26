@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import jwt
 import pytest
 from fastapi.testclient import TestClient
+from passlib.exc import PasswordTruncateError
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-123456")
@@ -16,7 +17,7 @@ from app.config import settings
 from app.database.connection import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.session import UserSession
-from app.security.auth import create_access_token, create_refresh_token
+from app.security.auth import create_access_token, create_refresh_token, get_password_hash, verify_password
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -58,6 +59,21 @@ def test_user_registration_and_login() -> None:
         assert db.query(AuditLog).filter(AuditLog.event_type == "LOGIN_SUCCESS").count() == 1
     finally:
         db.close()
+
+
+def test_ordinary_password_hashing_round_trip() -> None:
+    password = "StrongPass123!"
+
+    password_hash = get_password_hash(password)
+
+    assert password_hash.startswith("$2b$")
+    assert verify_password(password, password_hash) is True
+    assert verify_password("WrongPass123!", password_hash) is False
+
+
+def test_password_hashing_rejects_values_beyond_bcrypt_byte_limit() -> None:
+    with pytest.raises(PasswordTruncateError):
+        get_password_hash("A1!" + "a" * 70)
 
 
 def test_access_and_refresh_token_creation_include_unique_identifiers_and_expiration() -> None:

@@ -3,6 +3,9 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 
+BCRYPT_MAX_PASSWORD_BYTES = 72
+
+
 class RegisterRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=254)
     password: str = Field(..., min_length=12, max_length=128)
@@ -20,6 +23,8 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password must include at least one number")
         if not any(char in "!@#$%^&*()-_=+[]{};:'\",.<>/?" for char in value):
             raise ValueError("Password must include at least one special character")
+        if len(value.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+            raise ValueError("Password must not exceed 72 UTF-8 bytes")
         return value
 
 

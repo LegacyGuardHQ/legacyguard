@@ -14,7 +14,11 @@ from app.models.session import UserSession
 from app.models.user import User
 
 security = HTTPBearer(auto_error=False)
-password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+password_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__truncate_error=True,
+)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
