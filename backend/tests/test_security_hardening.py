@@ -189,6 +189,21 @@ def test_registration_rejects_oversized_credentials(email: str, password: str) -
     assert response.status_code == 422
 
 
+def test_registration_rejects_password_over_bcrypt_utf8_byte_limit() -> None:
+    password = "A1!" + "\u00e9" * 35
+
+    assert len(password) <= 128
+    assert len(password.encode("utf-8")) > 72
+
+    response = client.post(
+        "/auth/register",
+        json={"email": "byte-limit@example.com", "password": password},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == "Value error, Password must not exceed 72 UTF-8 bytes"
+
+
 def test_permission_checks_block_non_owner_access() -> None:
     first = client.post(
         "/auth/register",

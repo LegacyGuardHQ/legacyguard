@@ -9,6 +9,11 @@ updates:
       backend-dependencies:
         patterns:
           - "*"
+    ignore:
+      # Passlib 1.7.4 cannot initialize its bcrypt backend with bcrypt 5.x.
+      - dependency-name: bcrypt
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: npm
     directory: /frontend
