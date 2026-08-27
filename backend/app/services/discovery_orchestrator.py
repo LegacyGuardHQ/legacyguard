@@ -9,6 +9,7 @@ from typing import Callable, Protocol
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database.connection import begin_serialized_write
 from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETE,
     DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
@@ -88,11 +89,12 @@ class DiscoveryScanExecutor:
         return self.orchestrator.create_scan(db, user_id=user_id)
 
     def create_pending_bounded(self, db: Session, *, user_id: str) -> DiscoveryScan:
-        # PostgreSQL row locking makes the active-count check and pending insert
-        # serial for each user. SQLite serializes the subsequent write itself.
+        # PostgreSQL locks this user's row; SQLite obtains a write lock before
+        # the active-count check so separate sessions cannot create two scans.
         if not _discovery_scan_queue_slots.acquire(blocking=False):
             raise DiscoveryScanCapacityError("Discovery processing capacity is currently full")
         try:
+            begin_serialized_write(db)
             db.query(User.id).filter(User.id == user_id).with_for_update().one()
             self._expire_stale_pending_scans(db, user_id=user_id)
             active_scan_count = (

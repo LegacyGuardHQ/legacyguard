@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.config import settings
@@ -25,6 +25,15 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+def begin_serialized_write(db: Session) -> None:
+    """Start a write transaction that serializes SQLite quota checks and writes."""
+    if db.get_bind().dialect.name == "sqlite":
+        # API dependencies may have already performed read queries. End that
+        # deferred transaction before requesting SQLite's database write lock.
+        db.rollback()
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
 
 
 def init_db() -> None:

@@ -7,7 +7,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database.connection import SessionLocal
+from app.database.connection import SessionLocal, begin_serialized_write
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
 from app.models.document import (
@@ -292,8 +292,9 @@ def create_document_metadata(
 ) -> DocumentResponse:
     _get_owned_asset_if_supplied(db, payload.asset_id, current_user.id)
     _get_owned_beneficiary_if_supplied(db, payload.beneficiary_id, current_user.id)
-    # Serialize quota checks for a user on databases that support row locks.
-    # SQLite serializes the subsequent write transaction itself.
+    # PostgreSQL locks this user's row; SQLite obtains a write lock before the
+    # count so separate sessions cannot both create a 101st active document.
+    begin_serialized_write(db)
     db.query(User.id).filter(User.id == current_user.id).with_for_update().one()
     active_document_count = (
         db.query(Document)
