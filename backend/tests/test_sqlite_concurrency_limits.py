@@ -15,7 +15,6 @@ os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.api.documents import MAX_DOCUMENTS_PER_USER, create_document_metadata
 from app.database.connection import Base
-import app.models
 from app.models.discovery import DiscoveryScan
 from app.models.document import DOCUMENT_STATUS_ACTIVE, DOCUMENT_VERIFICATION_UNKNOWN, Document
 from app.models.user import User
