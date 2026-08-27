@@ -11,6 +11,7 @@ type LoginLocationState = {
 export default function LoginPage() {
   const { isAuthenticated, isInitializing, sessionError, login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [registrationNotice, setRegistrationNotice] = useState<string | null>(null);
   const location = useLocation();
   usePageTitle(mode === 'login' ? 'Sign in' : 'Register');
 
@@ -27,6 +28,12 @@ export default function LoginPage() {
     return <Navigate to={state?.from?.pathname || '/workspace'} replace />;
   }
 
+  async function handleRegistration(email: string, password: string) {
+    const message = await register(email, password);
+    setRegistrationNotice(message);
+    setMode('login');
+  }
+
   return (
     <main className="auth-page">
       <div className="auth-intro">
@@ -39,9 +46,13 @@ export default function LoginPage() {
       </div>
       <AuthForm
         mode={mode}
-        onSubmit={mode === 'login' ? login : register}
-        onSwitchMode={() => setMode((current) => (current === 'login' ? 'register' : 'login'))}
+        onSubmit={mode === 'login' ? login : handleRegistration}
+        onSwitchMode={() => {
+          setRegistrationNotice(null);
+          setMode((current) => (current === 'login' ? 'register' : 'login'));
+        }}
       />
+      {registrationNotice && <div className="success-message" role="status">{registrationNotice}</div>}
     </main>
   );
 }

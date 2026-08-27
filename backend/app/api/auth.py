@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.session import UserSession
 from app.models.user import User
 from app.models.user_security_settings import UserSecuritySettings
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import LoginRequest, RegistrationResponse, RegisterRequest, TokenResponse, UserResponse
 from app.config import settings
 from app.security.auth import create_access_token, create_refresh_token, get_current_user, get_db, get_password_hash, verify_password
 from app.services.audit import log_event
@@ -18,10 +18,16 @@ from app.services.operational_logging import log_event as operational_log_event
 from app.services.rate_limit import rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+REGISTRATION_RESPONSE_MESSAGE = (
+    "If registration is available for this address, you can sign in with the submitted credentials."
+)
+# This is a deliberately non-secret, fixed bcrypt hash used only to keep
+# unknown-user login failures from skipping bcrypt verification work.
+DUMMY_PASSWORD_HASH = "$2b$12$59YHxZXqz/v0i7CeWI1OMuV8fMRDgKqr/VY/eg/Xx70R2NMFIJ4Iy"
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register_user(payload: RegisterRequest, db: Session = Depends(get_db), request: Request = None) -> User:
+@router.post("/register", response_model=RegistrationResponse, status_code=status.HTTP_201_CREATED)
+def register_user(payload: RegisterRequest, db: Session = Depends(get_db), request: Request = None) -> RegistrationResponse:
     client_key = f"register:{request.client.host if request and request.client else 'unknown'}"
     allowed, retry_after = rate_limiter.allow(client_key)
     if not allowed:
@@ -32,14 +38,15 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db), reque
             headers={"Retry-After": str(retry_after)},
         )
 
+    password_hash = get_password_hash(payload.password)
     existing = db.query(User).filter(User.email == str(payload.email).lower()).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        return RegistrationResponse(message=REGISTRATION_RESPONSE_MESSAGE)
 
     user = User(
         id=str(uuid.uuid4()),
         email=str(payload.email).lower(),
-        password_hash=get_password_hash(payload.password),
+        password_hash=password_hash,
         is_active=True,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -51,12 +58,11 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db), reque
     log_event(db=db, user_id=user.id, event_type="ACCOUNT_CREATED", details="User registered", request=request)
     try:
         db.commit()
-    except IntegrityError as exc:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Email already registered") from exc
-    db.refresh(user)
+        return RegistrationResponse(message=REGISTRATION_RESPONSE_MESSAGE)
 
-    return user
+    return RegistrationResponse(message=REGISTRATION_RESPONSE_MESSAGE)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -70,7 +76,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many attempts")
 
     user = db.query(User).filter(User.email == str(payload.email).lower()).first()
-    if not user or not verify_password(payload.password, user.password_hash):
+    password_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+    if not verify_password(payload.password, password_hash) or user is None:
         database_login_rate_limiter.record_failure(db, client_key)
         log_event(db=db, user_id=user.id if user else None, event_type="LOGIN_FAILED", details="Invalid credentials", request=request)
         operational_log_event("auth_failure", event_category="auth", severity="warning", reason="invalid_credentials")

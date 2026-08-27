@@ -9,6 +9,7 @@ from typing import Callable, Protocol
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database.connection import begin_serialized_write
 from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETE,
     DISCOVERY_SCAN_STATUS_COMPLETED_WITH_WARNINGS,
@@ -30,6 +31,7 @@ from app.models.discovery_scan_document import (
     DiscoveryScanDocument,
 )
 from app.models.document import DOCUMENT_STORAGE_STORED, Document
+from app.models.user import User
 from app.services.audit import log_event
 from app.services.discovery_engine import DiscoveryEngine
 from app.services.discovery_privacy import DiscoveryPrivacyService
@@ -51,6 +53,8 @@ DISCOVERY_DOCUMENT_COMPLETED = "discovery_document_completed"
 DISCOVERY_DOCUMENT_SKIPPED = "discovery_document_skipped"
 DISCOVERY_SCAN_CONCURRENCY_LIMIT = 2
 _discovery_scan_slots = BoundedSemaphore(DISCOVERY_SCAN_CONCURRENCY_LIMIT)
+DISCOVERY_SCAN_QUEUE_LIMIT = 2
+_discovery_scan_queue_slots = BoundedSemaphore(DISCOVERY_SCAN_QUEUE_LIMIT)
 
 
 class DiscoveryOrchestrationError(RuntimeError):
@@ -58,6 +62,14 @@ class DiscoveryOrchestrationError(RuntimeError):
 
 
 class DiscoveryScanAlreadyClaimedError(DiscoveryOrchestrationError):
+    pass
+
+
+class DiscoveryScanCapacityError(DiscoveryOrchestrationError):
+    pass
+
+
+class DiscoveryUserScanLimitError(DiscoveryOrchestrationError):
     pass
 
 
@@ -75,6 +87,56 @@ class DiscoveryScanExecutor:
 
     def create_pending(self, db: Session, *, user_id: str) -> DiscoveryScan:
         return self.orchestrator.create_scan(db, user_id=user_id)
+
+    def create_pending_bounded(self, db: Session, *, user_id: str) -> DiscoveryScan:
+        # PostgreSQL locks this user's row; SQLite obtains a write lock before
+        # the active-count check so separate sessions cannot create two scans.
+        if not _discovery_scan_queue_slots.acquire(blocking=False):
+            raise DiscoveryScanCapacityError("Discovery processing capacity is currently full")
+        try:
+            begin_serialized_write(db)
+            db.query(User.id).filter(User.id == user_id).with_for_update().one()
+            self._expire_stale_pending_scans(db, user_id=user_id)
+            active_scan_count = (
+                db.query(DiscoveryScan)
+                .filter(
+                    DiscoveryScan.user_id == user_id,
+                    DiscoveryScan.status.in_({DISCOVERY_SCAN_STATUS_PENDING, DISCOVERY_SCAN_STATUS_RUNNING}),
+                )
+                .count()
+            )
+            if active_scan_count >= 1:
+                raise DiscoveryUserScanLimitError("A discovery scan is already active for this account")
+            return self.create_pending(db, user_id=user_id)
+        except Exception:
+            _discovery_scan_queue_slots.release()
+            raise
+
+    def _expire_stale_pending_scans(self, db: Session, *, user_id: str) -> None:
+        threshold_seconds = self.orchestrator.stale_scan_threshold_seconds
+        if threshold_seconds is None:
+            return
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=threshold_seconds)
+        (
+            db.query(DiscoveryScan)
+            .filter(
+                DiscoveryScan.user_id == user_id,
+                DiscoveryScan.status == DISCOVERY_SCAN_STATUS_PENDING,
+                DiscoveryScan.created_at <= cutoff,
+            )
+            .update(
+                {
+                    DiscoveryScan.status: DISCOVERY_SCAN_STATUS_FAILED,
+                    DiscoveryScan.completed_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+
+    @staticmethod
+    def release_pending_slot() -> None:
+        _discovery_scan_queue_slots.release()
 
     def process_existing(
         self,

@@ -11,6 +11,7 @@ name: CodeQL
     - cron: "17 8 * * 3"
 
 permissions:
+  actions: read
   contents: read
   security-events: write
 

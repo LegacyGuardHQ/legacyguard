@@ -2,12 +2,12 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database.connection import SessionLocal
+from app.database.connection import SessionLocal, begin_serialized_write
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
 from app.models.document import (
@@ -30,7 +30,9 @@ from app.security.auth import get_current_user, get_db
 from app.services.discovery_orchestrator import (
     DiscoveryOrchestrator,
     DiscoveryScanAlreadyClaimedError,
+    DiscoveryScanCapacityError,
     DiscoveryScanExecutor,
+    DiscoveryUserScanLimitError,
 )
 from app.services.document_content_encryption import DocumentContentEncryptionError, document_content_encryption_service
 from app.services.document_storage import DocumentStorage, DocumentStorageError
@@ -48,6 +50,8 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
 malware_scanner: MalwareScanner | None = None
 UPLOAD_READ_CHUNK_BYTES = 64 * 1024
+MAX_DOCUMENTS_PER_USER = 100
+MAX_DOCUMENT_LIST_PAGE_SIZE = 100
 
 
 def _build_document_storage() -> DocumentStorage:
@@ -140,15 +144,20 @@ def _trigger_discovery_scan_after_upload(
     user_id: str,
     document_id: str,
 ) -> DocumentUploadDiscoveryScanResponse | None:
-    scan = discovery_scan_executor.create_pending(db, user_id=user_id)
+    try:
+        scan = discovery_scan_executor.create_pending_bounded(db, user_id=user_id)
+    except (DiscoveryScanCapacityError, DiscoveryUserScanLimitError):
+        return None
     try:
         background_tasks.add_task(
             _process_discovery_scan_in_background,
             scan.id,
             user_id,
             document_id,
+            True,
         )
     except Exception:
+        discovery_scan_executor.release_pending_slot()
         db.rollback()
         try:
             discovery_scan_executor.mark_failed(db, scan_id=scan.id, user_id=user_id)
@@ -162,7 +171,12 @@ def _trigger_discovery_scan_after_upload(
     return DocumentUploadDiscoveryScanResponse(scan_id=scan.id, status=scan.status)
 
 
-def _process_discovery_scan_in_background(scan_id: str, user_id: str, document_id: str) -> None:
+def _process_discovery_scan_in_background(
+    scan_id: str,
+    user_id: str,
+    document_id: str,
+    slot_acquired: bool = False,
+) -> None:
     db: Session | None = None
     try:
         db = SessionLocal()
@@ -198,6 +212,8 @@ def _process_discovery_scan_in_background(scan_id: str, user_id: str, document_i
     finally:
         if db is not None:
             db.close()
+        if slot_acquired:
+            discovery_scan_executor.release_pending_slot()
 
 
 def _validate_document_upload_lifecycle(db: Session, document: Document, user_id: str) -> None:
@@ -276,6 +292,20 @@ def create_document_metadata(
 ) -> DocumentResponse:
     _get_owned_asset_if_supplied(db, payload.asset_id, current_user.id)
     _get_owned_beneficiary_if_supplied(db, payload.beneficiary_id, current_user.id)
+    # PostgreSQL locks this user's row; SQLite obtains a write lock before the
+    # count so separate sessions cannot both create a 101st active document.
+    begin_serialized_write(db)
+    db.query(User.id).filter(User.id == current_user.id).with_for_update().one()
+    active_document_count = (
+        db.query(Document)
+        .filter(Document.user_id == current_user.id, Document.archived_at.is_(None))
+        .count()
+    )
+    if active_document_count >= MAX_DOCUMENTS_PER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document limit reached.",
+        )
 
     now = datetime.now(timezone.utc)
     document = Document(
@@ -316,11 +346,18 @@ def create_document_metadata(
 
 
 @router.get("", response_model=list[DocumentListResponse])
-def list_document_metadata(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[DocumentListResponse]:
+def list_document_metadata(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(MAX_DOCUMENT_LIST_PAGE_SIZE, ge=1, le=MAX_DOCUMENT_LIST_PAGE_SIZE),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[DocumentListResponse]:
     documents = (
         db.query(Document)
         .filter(Document.user_id == current_user.id, Document.archived_at.is_(None))
-        .order_by(Document.created_at.asc())
+        .order_by(Document.created_at.asc(), Document.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
     return [_document_list_response(document) for document in documents]

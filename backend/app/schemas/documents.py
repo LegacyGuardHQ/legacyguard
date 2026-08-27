@@ -15,7 +15,7 @@ from app.models.document import (
     DOCUMENT_VERIFICATION_UNKNOWN,
     DOCUMENT_VERIFICATION_VERIFIED,
 )
-from app.services.document_validation import normalize_display_filename, validate_extension_and_mime
+from app.services.document_validation import MAX_DOCUMENT_BYTES, normalize_display_filename, validate_extension_and_mime
 
 DocumentUploadDiscoveryScanStatus = Literal[
     "PENDING",
@@ -58,18 +58,18 @@ assert set(DocumentVerificationStatus.__args__) == {
 
 
 class DocumentCreate(BaseModel):
-    asset_id: str | None = None
-    beneficiary_id: str | None = None
-    document_type: str
-    document_name: str = Field(..., min_length=1)
-    description: str | None = None
-    original_filename: str | None = None
-    mime_type: str | None = None
-    file_size: int | None = Field(default=None, ge=0)
+    asset_id: str | None = Field(default=None, max_length=64)
+    beneficiary_id: str | None = Field(default=None, max_length=64)
+    document_type: str = Field(..., max_length=100)
+    document_name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    original_filename: str | None = Field(default=None, max_length=255)
+    mime_type: str | None = Field(default=None, max_length=255)
+    file_size: int | None = Field(default=None, ge=0, le=MAX_DOCUMENT_BYTES)
     effective_date: datetime | None = None
     expiration_date: datetime | None = None
     review_due_at: datetime | None = None
-    version_number: int = Field(default=1, ge=1)
+    version_number: int = Field(default=1, ge=1, le=2_147_483_647)
 
     model_config = ConfigDict(extra="forbid")
 

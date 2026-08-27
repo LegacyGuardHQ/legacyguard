@@ -13,10 +13,12 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.main import app
+from app.api import auth as auth_api
 from app.config import settings
 from app.database.connection import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.session import UserSession
+from app.models.user import User
 from app.security.auth import create_access_token, create_refresh_token, get_password_hash, verify_password
 from app.services.rate_limit import rate_limiter
 
@@ -42,7 +44,9 @@ def test_user_registration_and_login() -> None:
     )
     assert response.status_code == 201
     payload = response.json()
-    assert payload["email"] == "user@example.com"
+    assert payload == {
+        "message": "If registration is available for this address, you can sign in with the submitted credentials."
+    }
     assert "password_hash" not in payload
 
     login_response = client.post(
@@ -111,6 +115,56 @@ def test_login_failure_with_invalid_password() -> None:
         db.close()
 
 
+def test_missing_user_login_performs_dummy_bcrypt_verification(monkeypatch) -> None:
+    observed_hashes: list[str] = []
+    real_verify_password = auth_api.verify_password
+
+    def observe_verification(password: str, password_hash: str) -> bool:
+        observed_hashes.append(password_hash)
+        return real_verify_password(password, password_hash)
+
+    monkeypatch.setattr(auth_api, "verify_password", observe_verification)
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "missing@example.com", "password": "WrongPass123!"},
+    )
+
+    assert response.status_code == 401
+    assert observed_hashes == [auth_api.DUMMY_PASSWORD_HASH]
+    assert real_verify_password("WrongPass123!", auth_api.DUMMY_PASSWORD_HASH) is False
+
+
+def test_existing_user_failure_verifies_the_stored_hash(monkeypatch) -> None:
+    client.post(
+        "/auth/register",
+        json={"email": "existing@example.com", "password": "StrongPass123!"},
+    )
+    db = SessionLocal()
+    try:
+        stored_hash = db.query(User.password_hash).filter(User.email == "existing@example.com").scalar()
+    finally:
+        db.close()
+
+    observed_hashes: list[str] = []
+    real_verify_password = auth_api.verify_password
+
+    def observe_verification(password: str, password_hash: str) -> bool:
+        observed_hashes.append(password_hash)
+        return real_verify_password(password, password_hash)
+
+    monkeypatch.setattr(auth_api, "verify_password", observe_verification)
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "existing@example.com", "password": "WrongPass123!"},
+    )
+
+    assert response.status_code == 401
+    assert observed_hashes == [stored_hash]
+    assert stored_hash != auth_api.DUMMY_PASSWORD_HASH
+
+
 def test_logout_persists_revocation_and_audit_event() -> None:
     client.post(
         "/auth/register",
@@ -168,3 +222,25 @@ def test_password_hashing_is_not_plaintext() -> None:
     assert user is not None
     assert user.password_hash != "StrongPass123!"
     assert user.password_hash.startswith("$2b$")
+
+
+def test_registration_response_does_not_disclose_account_membership() -> None:
+    first = client.post(
+        "/auth/register",
+        json={"email": "member@example.com", "password": "StrongPass123!"},
+    )
+    second = client.post(
+        "/auth/register",
+        json={"email": "member@example.com", "password": "DifferentPass123!"},
+    )
+
+    assert first.status_code == second.status_code == 201
+    assert first.json() == second.json()
+    assert first.json() == {"message": auth_api.REGISTRATION_RESPONSE_MESSAGE}
+
+    db = SessionLocal()
+    try:
+        assert db.query(User).filter(User.email == "member@example.com").count() == 1
+        assert db.query(AuditLog).filter(AuditLog.event_type == "ACCOUNT_CREATED").count() == 1
+    finally:
+        db.close()
