@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,8 +13,15 @@ os.environ.setdefault("ENVIRONMENT", "testing")
 from app.api import discovery as discovery_api
 from app.database.connection import SessionLocal
 from app.main import app
-from app.models.discovery import EVIDENCE_REVIEW_STATUS_PENDING_REVIEW, DiscoveryScan, EvidenceFinding
+from app.models.discovery import (
+    DISCOVERY_SCAN_STATUS_FAILED,
+    DISCOVERY_SCAN_STATUS_PENDING,
+    EVIDENCE_REVIEW_STATUS_PENDING_REVIEW,
+    DiscoveryScan,
+    EvidenceFinding,
+)
 from app.models.document import Document
+from app.services import discovery_orchestrator as discovery_orchestrator_module
 from app.services.audit import log_event
 from app.services.rate_limit import rate_limiter
 
@@ -71,8 +78,121 @@ def test_user_can_start_scan(monkeypatch) -> None:
     assert response.status_code == 201
     payload = response.json()
     assert set(payload.keys()) == {"scan_id", "status", "created_at"}
-    assert payload["status"] == "COMPLETE"
+    assert payload["status"] == "PENDING"
     assert "user_id" not in payload
+
+    status_response = client.get(f"/discovery/scans/{payload['scan_id']}", headers={"Authorization": f"Bearer {token}"})
+    assert status_response.status_code == 200
+    assert status_response.json()["status"] == "COMPLETE"
+
+
+def test_user_cannot_queue_a_second_active_scan() -> None:
+    token = _token("active-scan@example.com")
+    document_id = _create_document(token)
+    user_id = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+    db = SessionLocal()
+    try:
+        db.add(
+            DiscoveryScan(
+                id="already-active",
+                user_id=user_id,
+                status=DISCOVERY_SCAN_STATUS_PENDING,
+                documents_processed=0,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/discovery/scans",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"document_ids": [document_id]},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "A discovery scan is already active for this account."
+
+
+def test_stale_pending_scan_does_not_block_user_indefinitely(monkeypatch) -> None:
+    token = _token("stale-pending@example.com")
+    document_id = _create_document(token)
+    user_id = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+    db = SessionLocal()
+    try:
+        db.add(
+            DiscoveryScan(
+                id="orphaned-pending",
+                user_id=user_id,
+                status=DISCOVERY_SCAN_STATUS_PENDING,
+                documents_processed=0,
+                created_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    monkeypatch.setattr(discovery_api.discovery_orchestrator, "stale_scan_threshold_seconds", 60)
+    monkeypatch.setattr(discovery_api.discovery_orchestrator, "text_provider", ApiFakeTextProvider())
+
+    response = client.post(
+        "/discovery/scans",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"document_ids": [document_id]},
+    )
+
+    assert response.status_code == 201
+    db = SessionLocal()
+    try:
+        orphaned = db.query(DiscoveryScan).filter(DiscoveryScan.id == "orphaned-pending").one()
+        assert orphaned.status == DISCOVERY_SCAN_STATUS_FAILED
+        assert orphaned.completed_at is not None
+    finally:
+        db.close()
+
+
+def test_discovery_queue_rejects_work_when_process_capacity_is_full() -> None:
+    token = _token("queue-limit@example.com")
+    document_id = _create_document(token)
+    acquired = 0
+    try:
+        for _ in range(discovery_orchestrator_module.DISCOVERY_SCAN_QUEUE_LIMIT):
+            assert discovery_orchestrator_module._discovery_scan_queue_slots.acquire(blocking=False)
+            acquired += 1
+
+        response = client.post(
+            "/discovery/scans",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"document_ids": [document_id]},
+        )
+    finally:
+        for _ in range(acquired):
+            discovery_orchestrator_module._discovery_scan_queue_slots.release()
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Discovery processing capacity is currently full."
+
+
+def test_discovery_scan_rejects_excess_total_document_size(monkeypatch) -> None:
+    token = _token("scan-bytes@example.com")
+    document_id = _create_document(token)
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == document_id).one()
+        document.file_size = 2
+        db.commit()
+    finally:
+        db.close()
+    monkeypatch.setattr(discovery_api, "MAX_DISCOVERY_SCAN_BYTES", 1)
+
+    response = client.post(
+        "/discovery/scans",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"document_ids": [document_id]},
+    )
+
+    assert response.status_code == 413
 
 
 def test_user_cannot_access_another_users_scan() -> None:

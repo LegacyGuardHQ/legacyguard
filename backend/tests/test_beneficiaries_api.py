@@ -135,7 +135,7 @@ def test_sensitive_contact_information_is_encrypted_in_storage() -> None:
         assert beneficiary.modified_by == beneficiary.user_id
         assert beneficiary.contact_information_encrypted != "jane@example.com, 555-0100"
         assert beneficiary.contact_information_encrypted is not None
-        assert beneficiary.contact_information != "jane@example.com, 555-0100"
+        assert "contact_information" not in Beneficiary.__table__.c
     finally:
         db.close()
 
@@ -149,7 +149,7 @@ def test_sensitive_notes_are_encrypted_in_storage() -> None:
         beneficiary = db.query(Beneficiary).filter(Beneficiary.id == created["id"]).one()
         assert beneficiary.notes_encrypted != "Private beneficiary note"
         assert beneficiary.notes_encrypted is not None
-        assert beneficiary.notes != "Private beneficiary note"
+        assert "notes" not in Beneficiary.__table__.c
     finally:
         db.close()
 
@@ -230,8 +230,8 @@ def test_updated_sensitive_values_remain_encrypted_in_storage() -> None:
         beneficiary = db.query(Beneficiary).filter(Beneficiary.id == created["id"]).one()
         assert beneficiary.contact_information_encrypted != "updated@example.com"
         assert beneficiary.notes_encrypted != "Updated private note"
-        assert beneficiary.contact_information != "updated@example.com"
-        assert beneficiary.notes != "Updated private note"
+        assert "contact_information" not in Beneficiary.__table__.c
+        assert "notes" not in Beneficiary.__table__.c
         assert beneficiary.modified_by == beneficiary.user_id
     finally:
         db.close()

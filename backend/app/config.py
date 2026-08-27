@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     document_object_read_timeout_seconds: int = Field(default=30, ge=1, le=300)
     document_object_max_attempts: int = Field(default=3, ge=1, le=10)
     document_master_key_id: str = Field(default="legacy-current-v1", pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-    discovery_stale_scan_threshold_seconds: int | None = None
+    discovery_stale_scan_threshold_seconds: int = Field(default=900, ge=60, le=86_400)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

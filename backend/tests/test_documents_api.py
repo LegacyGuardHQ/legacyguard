@@ -188,6 +188,74 @@ def test_user_lists_only_own_documents() -> None:
     assert payload[0]["document_name"] == "Owner Doc"
 
 
+def test_document_listing_is_paginated_with_a_bounded_page_size() -> None:
+    token = _token("document-pages@example.com")
+    created_ids = [
+        _post_document(token, document_name=f"Document {index}").json()["id"]
+        for index in range(3)
+    ]
+
+    first_page = client.get(
+        "/documents?page=1&page_size=2",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    second_page = client.get(
+        "/documents?page=2&page_size=2",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    oversized_page = client.get(
+        f"/documents?page_size={documents_api.MAX_DOCUMENT_LIST_PAGE_SIZE + 1}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert first_page.status_code == second_page.status_code == 200
+    assert [item["id"] for item in first_page.json()] == created_ids[:2]
+    assert [item["id"] for item in second_page.json()] == created_ids[2:]
+    assert oversized_page.status_code == 422
+
+
+def test_document_metadata_rejects_oversized_text_fields() -> None:
+    token = _token("metadata-bounds@example.com")
+
+    response = client.post(
+        "/documents",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "document_type": "WILL",
+            "document_name": "N" * 256,
+            "description": "D" * 10_001,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("file_size", 20 * 1024 * 1024 + 1),
+        ("version_number", 2_147_483_648),
+    ],
+)
+def test_document_metadata_rejects_oversized_numeric_fields(field: str, value: int) -> None:
+    token = _token(f"numeric-{field}@example.com")
+
+    response = _post_document(token, **{field: value})
+
+    assert response.status_code == 422
+
+
+def test_document_metadata_limit_is_enforced_per_user(monkeypatch) -> None:
+    token = _token("metadata-limit@example.com")
+    monkeypatch.setattr(documents_api, "MAX_DOCUMENTS_PER_USER", 1)
+
+    assert _post_document(token, document_name="First").status_code == 201
+    response = _post_document(token, document_name="Second")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Document limit reached."
+
+
 def test_cross_user_detail_access_returns_404() -> None:
     owner_token = _token("owner@example.com")
     other_token = _token("other@example.com")
@@ -679,6 +747,40 @@ def test_upload_triggers_discovery_scan_for_text_document() -> None:
         documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
+def test_upload_does_not_bypass_existing_active_scan_limit() -> None:
+    token = _token("upload-active-scan@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    user_id = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"]
+    db = SessionLocal()
+    try:
+        existing_scan = documents_api.discovery_scan_executor.create_pending(db, user_id=user_id)
+        existing_scan_id = existing_scan.id
+    finally:
+        db.close()
+
+    try:
+        response = _upload_document(
+            token,
+            document_id,
+            content=b"retirement rollover account",
+            filename="statement.txt",
+            mime_type="text/plain",
+        )
+
+        assert response.status_code == 200
+        assert response.json()["discovery_scan"] is None
+        db = SessionLocal()
+        try:
+            scans = db.query(DiscoveryScan).filter(DiscoveryScan.user_id == user_id).all()
+            assert [scan.id for scan in scans] == [existing_scan_id]
+        finally:
+            db.close()
+    finally:
+        documents_api.document_storage.delete_permanently(_storage_locator(document_id))
+
+
 def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
     token = _token("upload-discovery-pdf@example.com")
     document = _post_document(token)
@@ -747,6 +849,7 @@ def test_upload_schedules_discovery_without_running_it_inline(monkeypatch) -> No
             payload["discovery_scan"]["scan_id"],
             client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()["id"],
             document_id,
+            True,
         )
         assert scheduled["kwargs"] == {}
 
@@ -761,6 +864,8 @@ def test_upload_schedules_discovery_without_running_it_inline(monkeypatch) -> No
             db.close()
         assert documents_api.document_storage.exists(_storage_locator(document_id))
     finally:
+        if scheduled:
+            documents_api.discovery_scan_executor.release_pending_slot()
         documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
@@ -966,7 +1071,8 @@ def test_scheduling_failure_is_reraised_when_scan_failure_recording_also_fails(m
 
     db = TrackingSession()
     scan = SimpleNamespace(id="scan-1", status=DISCOVERY_SCAN_STATUS_PENDING)
-    monkeypatch.setattr(documents_api.discovery_scan_executor, "create_pending", lambda *args, **kwargs: scan)
+    monkeypatch.setattr(documents_api.discovery_scan_executor, "create_pending_bounded", lambda *args, **kwargs: scan)
+    monkeypatch.setattr(documents_api.discovery_scan_executor, "release_pending_slot", lambda: None)
 
     def fail_recording(*args, **kwargs):
         raise RuntimeError("failure recording failed")
@@ -1173,3 +1279,31 @@ def test_empty_discovery_scan_request_remains_rejected() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_discovery_scan_request_rejects_duplicate_or_excess_document_ids() -> None:
+    token = _token("discovery-bounds@example.com")
+    document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+
+    duplicate = client.post(
+        "/discovery/scans",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"document_ids": [document_id, document_id]},
+    )
+    excess = client.post(
+        "/discovery/scans",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"document_ids": [str(index) for index in range(6)]},
+    )
+
+    assert duplicate.status_code == 422
+    assert excess.status_code == 422
+
+    oversized_id = client.post(
+        "/discovery/scans",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"document_ids": ["x" * 65]},
+    )
+    assert oversized_id.status_code == 422

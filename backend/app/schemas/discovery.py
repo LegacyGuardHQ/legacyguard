@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Generic, List, Literal, TypeVar
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.assets import AssetDetailCreate
 
@@ -155,8 +155,16 @@ class DiscoveryScanDocumentSchema(BaseModel):
 
 
 class DiscoveryScanCreate(BaseModel):
-    document_ids: list[str] = Field(..., min_length=1)
+    document_ids: list[str] = Field(..., min_length=1, max_length=5)
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_document_ids(self) -> "DiscoveryScanCreate":
+        if len(self.document_ids) != len(set(self.document_ids)):
+            raise ValueError("Document IDs must be unique")
+        if any(not document_id or len(document_id) > 64 for document_id in self.document_ids):
+            raise ValueError("Document IDs must contain between 1 and 64 characters")
+        return self
 
 
 class DiscoveryScanResponse(BaseModel):

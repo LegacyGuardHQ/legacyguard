@@ -54,7 +54,7 @@ def test_rc_document_rows_backfill_and_downgrade_without_reference_loss(tmp_path
                 },
             )
 
-    _run_alembic(backend_root, database_url, "upgrade", "head")
+    _run_alembic(backend_root, database_url, "upgrade", "f4a5b6c7d8e9")
     with engine.connect() as connection:
         rows = {
             row.id: row

@@ -1,8 +1,8 @@
 import { request } from './client';
 import type { TokenResponse, User } from '../types/auth';
 
-export function register(email: string, password: string): Promise<User> {
-  return request<User>('/auth/register', {
+export function register(email: string, password: string): Promise<{ message: string }> {
+  return request<{ message: string }>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });

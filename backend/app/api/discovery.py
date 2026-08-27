@@ -1,10 +1,13 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.audit_log import AuditLog
 from app.models.discovery import (
     DISCOVERY_SCAN_STATUS_COMPLETE,
@@ -24,6 +27,7 @@ from app.models.discovery_scan_document import DiscoveryScanDocument
 from app.models.document import Document
 from app.models.asset import Asset
 from app.models.user import User
+from app.database.connection import SessionLocal
 from app.schemas.discovery import (
     DiscoveryReportSummaryResponse,
     DiscoverySafeReportResponse,
@@ -47,12 +51,24 @@ from app.security.auth import get_current_user, get_db
 from app.services.asset_creation import create_asset_record
 from app.services.audit import log_event
 from app.services.discovery_categories import DISCOVERY_CATEGORY_VALUES
-from app.services.discovery_orchestrator import DiscoveryOrchestrationError, DiscoveryOrchestrator
+from app.services.discovery_orchestrator import (
+    DiscoveryOrchestrationError,
+    DiscoveryOrchestrator,
+    DiscoveryScanAlreadyClaimedError,
+    DiscoveryScanCapacityError,
+    DiscoveryScanExecutor,
+    DiscoveryUserScanLimitError,
+)
 from app.services.discovery_reports import DiscoveryReportService
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
-discovery_orchestrator = DiscoveryOrchestrator()
+discovery_orchestrator = DiscoveryOrchestrator(
+    stale_scan_threshold_seconds=settings.discovery_stale_scan_threshold_seconds
+)
+discovery_scan_executor = DiscoveryScanExecutor(discovery_orchestrator)
 discovery_report_service = DiscoveryReportService()
+logger = logging.getLogger(__name__)
+MAX_DISCOVERY_SCAN_BYTES = 50 * 1024 * 1024
 
 
 def _scan_response(scan: DiscoveryScan) -> DiscoveryScanResponse:
@@ -300,16 +316,106 @@ def _get_owned_finding(db: Session, finding_id: str, user_id: str) -> EvidenceFi
     return finding
 
 
+def _process_discovery_scan_in_background(
+    scan_id: str,
+    user_id: str,
+    document_ids: list[str],
+    slot_acquired: bool = False,
+) -> None:
+    db: Session | None = None
+    try:
+        db = SessionLocal()
+        discovery_scan_executor.process_existing(
+            db,
+            scan_id=scan_id,
+            user_id=user_id,
+            document_ids=document_ids,
+        )
+    except DiscoveryScanAlreadyClaimedError:
+        if db is not None:
+            db.rollback()
+        logger.info("Background discovery scan was already claimed or completed", extra={"scan_id": scan_id, "user_id": user_id})
+    except Exception:
+        if db is not None:
+            db.rollback()
+        logger.exception("Background discovery processing failed", extra={"scan_id": scan_id, "user_id": user_id})
+        if db is not None:
+            try:
+                discovery_scan_executor.mark_failed(db, scan_id=scan_id, user_id=user_id)
+            except Exception:
+                db.rollback()
+                logger.exception("Failed to record background discovery failure", extra={"scan_id": scan_id, "user_id": user_id})
+    finally:
+        if db is not None:
+            db.close()
+        if slot_acquired:
+            discovery_scan_executor.release_pending_slot()
+
+
 @router.post("/scans", response_model=DiscoveryScanResponse, status_code=status.HTTP_201_CREATED)
 def create_discovery_scan(
     payload: DiscoveryScanCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DiscoveryScanResponse:
+    selected_documents = (
+        db.query(Document.id, Document.file_size)
+        .filter(Document.user_id == current_user.id, Document.id.in_(payload.document_ids))
+        .all()
+    )
+    if len(selected_documents) != len(payload.document_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Discovery scan contains unavailable documents.",
+        )
+    total_document_bytes = sum(max(file_size or 0, 0) for _document_id, file_size in selected_documents)
+    if total_document_bytes > MAX_DISCOVERY_SCAN_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="Discovery scan exceeds the total document-size limit.",
+        )
+    scan: DiscoveryScan | None = None
+    slot_acquired = False
+    scheduled = False
     try:
-        scan = discovery_orchestrator.run_scan(db, user_id=current_user.id, document_ids=payload.document_ids)
+        scan = discovery_scan_executor.create_pending_bounded(db, user_id=current_user.id)
+        slot_acquired = True
+        background_tasks.add_task(
+            _process_discovery_scan_in_background,
+            scan.id,
+            current_user.id,
+            payload.document_ids,
+            True,
+        )
+        scheduled = True
+    except DiscoveryUserScanLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="A discovery scan is already active for this account.",
+        ) from exc
+    except DiscoveryScanCapacityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Discovery processing capacity is currently full.",
+        ) from exc
     except DiscoveryOrchestrationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Discovery scan failed") from exc
+    except Exception as exc:
+        db.rollback()
+        if scan is not None:
+            try:
+                discovery_scan_executor.mark_failed(db, scan_id=scan.id, user_id=current_user.id)
+            except Exception:
+                db.rollback()
+                logger.exception("Failed to record unscheduled discovery scan", extra={"user_id": current_user.id})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Discovery scan could not be scheduled",
+        ) from exc
+    finally:
+        if slot_acquired and not scheduled:
+            discovery_scan_executor.release_pending_slot()
     return _scan_response(scan)
 
 
