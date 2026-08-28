@@ -1,10 +1,14 @@
 # LegacyGuard Development Roadmap
 
-## Current state (2026-08-07)
-- Repository is stable on master at `8cfff7a`.
-- Phase 5.4 and Phase 5.5 are complete and merged.
-- Phase 5.6 extraction reliability is in progress.
-- The current slice focuses on handling unsupported or empty document content without undermining scan completion semantics.
+## Current state (2026-08-27)
+
+- Canonical repository: `LegacyGuard/legacyguard`
+- Audited baseline: `df05377b1cbec521d5c46b29ad2b7efc40f162ea`
+- Maturity: Alpha
+- Repository visibility: Private pending public-launch review
+- Real sensitive data: Not approved; use synthetic data only
+- Current work: public-launch blocker remediation, history/privacy owner
+  decisions, accurate documentation, and fail-closed production configuration
 
 ## Completed milestones
 - Phase 5.1 — Dependency Baseline and CI Health
@@ -16,8 +20,17 @@
   - Expanded backend and frontend regression coverage for background status monitoring
 
 ## Upcoming milestones
-- Phase 5.6 — Extraction Reliability
-  - Improve handling for unsupported or low-quality document formats
-  - Preserve clear warning semantics for skipped or failed documents
-- Phase 5.7 — Review Queue UX Refinement
-  - Improve the finding-review experience and status clarity
+
+- Public-source candidate
+  - resolve historical identity and user-machine path exposure
+  - establish a verified private vulnerability-reporting fallback
+  - complete legal/provenance and contribution-intake decisions
+  - correct and independently review the external project website
+- Production prerequisites
+  - integrate real malware scanning and quarantine
+  - prove coordinated PostgreSQL/object-storage backup and restore
+  - establish managed key recovery and rotation
+  - add proxy-aware distributed abuse controls and operational monitoring
+- Product reliability
+  - improve extraction handling for unsupported or low-quality formats
+  - refine review-queue status clarity and accessibility

@@ -28,13 +28,13 @@ Required:
 - JWT_SECRET
 - ENVIRONMENT
 - CORS_ALLOWED_ORIGINS
+- DOCUMENT_STORAGE_BACKEND (`OBJECT` is mandatory in production)
+- DOCUMENT_OBJECT_BUCKET
 
 Optional:
 
 - DEBUG
-- DOCUMENT_STORAGE_BACKEND (`LOCAL` by default; use `OBJECT` for production object storage)
 - DOCUMENT_STORAGE_ROOT
-- DOCUMENT_OBJECT_BUCKET (required when the backend is `OBJECT`)
 - DOCUMENT_OBJECT_PREFIX (default: `legacyguard`)
 - DOCUMENT_OBJECT_REGION
 - DOCUMENT_OBJECT_ENDPOINT_URL (for S3-compatible providers; HTTPS is required outside development/testing)
@@ -45,7 +45,6 @@ Optional:
 - DOCUMENT_OBJECT_ACCESS_KEY_ID, DOCUMENT_OBJECT_SECRET_ACCESS_KEY, and DOCUMENT_OBJECT_SESSION_TOKEN (optional explicit credentials; prefer the provider SDK credential chain)
 - DOCUMENT_MASTER_KEY_ID (non-secret identifier for the current document master key; defaults to `legacy-current-v1`)
 - ACCESS_TOKEN_EXPIRE_MINUTES
-- REFRESH_TOKEN_EXPIRE_DAYS
 - DISCOVERY_STALE_SCAN_THRESHOLD_SECONDS
 - DATABASE_POOL_SIZE (default: 5)
 - DATABASE_MAX_OVERFLOW (default: 10)
@@ -92,9 +91,9 @@ Configure default privileges so new migration-created tables and sequences are
 usable by the runtime role. Revoke broad `PUBLIC` schema creation rights where
 the provider permits it. Store and rotate both credentials independently.
 
-SQLite remains supported for local development and isolated tests. It is not
-the recommended production database because it does not provide the concurrent
-connection, managed-backup, and availability characteristics expected here.
+SQLite remains supported for local development and isolated tests. Production
+startup rejects both in-memory and file-backed SQLite and requires a supported
+PostgreSQL URL normalized to the Psycopg 3 driver.
 
 ## Secret generation
 
@@ -173,11 +172,12 @@ the backend suite against PostgreSQL 16 on every pull request.
 ## Backup and restore
 
 `LocalDocumentStorage` remains intended for development, tests, and synthetic
-single-instance validation. The S3-compatible adapter supplies durable encrypted
-object persistence, but coordinated blob/database backup and restore, production
-key recovery, malware scanning/quarantine, deployment monitoring, and an approved
-retention policy are not implemented yet. The document-storage production blocker
-therefore remains open and real sensitive documents must not be admitted.
+single-instance validation; production startup rejects it. The S3-compatible
+adapter supplies durable encrypted object persistence. Production uploads are
+rejected with HTTP 503 unless a malware scanner is configured, but a real
+scanner, quarantine workflow, coordinated blob/database backup and restore,
+production key recovery, deployment monitoring, and an approved retention
+policy are not implemented yet. Real sensitive documents must not be admitted.
 
 Back up:
 
@@ -199,22 +199,29 @@ Restore requires the same environment values and the same encryption key. Losing
 - Restore the last known-good backup if a deployment fails.
 - Roll back the application build and restart the previous version.
 - Verify /health/live and /health/ready after rollback.
-- Re-run the production smoke test after rollback.
+- Re-run the isolated deployment smoke test after rollback, then run a separate
+  environment-specific production verification against disposable resources.
 - Do not rely on automatic Alembic downgrade.
 
-## Smoke tests
+## Isolated deployment smoke test
 
-- app starts with production-style configuration
+- app starts with isolated testing configuration
 - /health/live succeeds
 - /health/ready succeeds
 - database and storage checks pass
 - authentication still works
-- frontend points to the intended API base URL
-- run scripts/production_smoke_test.py against a safe temporary production-style configuration
+- run `scripts/production_smoke_test.py` only with synthetic temporary data
+
+This harness intentionally uses SQLite and local storage under
+`ENVIRONMENT=testing`. It validates packaging and basic runtime behavior; it
+does not bypass production safeguards or prove a production deployment ready.
 
 ## RC1 recovery verification tool
 
-Use scripts/rc1_recovery_verification.py to execute deterministic backup, restore, and rollback proof using only temporary test artifacts.
+Use scripts/rc1_recovery_verification.py to execute deterministic backup,
+restore, and rollback proof under `ENVIRONMENT=testing` using only temporary
+SQLite, local-storage, and synthetic test artifacts. It is not a production
+backup/restore proof.
 
 Requirements:
 
@@ -268,7 +275,7 @@ cd backend
 alembic upgrade head
 ```
 
-4. Run the production smoke test:
+4. Run the isolated deployment smoke test:
 
 ```bash
 python scripts/production_smoke_test.py

@@ -6,32 +6,46 @@ seriously.
 
 ## Supported Versions
 
-Security fixes are currently prioritized for the latest stable release of
-LegacyGuard.
+LegacyGuard is alpha software. Security fixes are prioritized for the current
+`master` branch and the latest alpha prerelease. Older tags are not supported
+as production releases.
 
 | Version | Supported |
 | ------- | --------- |
-| 1.x     | Yes       |
-| < 1.0   | No        |
+| Current `master` and latest alpha prerelease | Yes |
+| Older tags | Best effort |
 
 ## Reporting a Vulnerability
 
-Please do not report suspected security vulnerabilities through a public
-GitHub issue, discussion, or pull request.
+Do not report a suspected vulnerability through a public GitHub issue,
+discussion, pull request, website form, or social-media post. Do not include
+vulnerability details in a public request for contact.
 
-Use GitHub's private vulnerability reporting or security-advisory mechanism
-when available for this repository.
+LegacyGuard does not yet have a verified dedicated private reporting address.
+Before the repository becomes public, the owner must establish and test a
+private contact channel and replace this paragraph with that verified route.
+Until then, the maintainer's public GitHub profile may be used only to request
+a private channel. The initial request must not contain technical details,
+proof-of-concept code, secrets, logs, or personal information.
 
-This repository is currently private while its permanent location is being
-resolved, so GitHub's private reporting interface may not be visible to every
-reporter. If it is unavailable, use the maintainer's public GitHub profile only
-to request a private reporting channel. Do not include vulnerability details,
-proof-of-concept code, secrets, or personal information in that initial public
-request. A permanent private reporting route will be documented before the
-repository is made public.
+Immediately after the repository becomes public, the owner will enable and
+test GitHub private vulnerability reporting. When enabled, use **Report a
+vulnerability** on the repository's **Security** tab. If that interface is
+unavailable, use the verified fallback route documented in this policy; do not
+open a public issue.
 
-Please provide enough information to reproduce and evaluate the issue while
-avoiding unnecessary disclosure of sensitive information.
+Include, when safely available:
+
+- the affected version or commit
+- a concise impact statement
+- prerequisites and safe reproduction steps using synthetic data
+- relevant sanitized logs or screenshots
+- a suggested remediation or mitigation, if known
+
+Do not send real user records or credentials as evidence. There is no fixed
+response-time guarantee. The maintainer will acknowledge and triage reports as
+capacity permits and will coordinate remediation and disclosure through the
+same private channel.
 
 ## Do Not Submit Sensitive Personal Information
 
@@ -51,7 +65,8 @@ Use synthetic or appropriately redacted test data whenever possible.
 
 ## Responsible Disclosure
 
-Please allow reasonable time for investigation and remediation before
-publicly disclosing a vulnerability.
+Please allow reasonable time for investigation and remediation before public
+disclosure. Do not test against systems or data you do not own or have explicit
+authorization to assess.
 
 Thank you for helping improve LegacyGuard's security.

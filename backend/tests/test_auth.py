@@ -19,7 +19,7 @@ from app.database.connection import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.session import UserSession
 from app.models.user import User
-from app.security.auth import create_access_token, create_refresh_token, get_password_hash, verify_password
+from app.security.auth import create_access_token, get_password_hash, verify_password
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -55,7 +55,7 @@ def test_user_registration_and_login() -> None:
     )
     assert login_response.status_code == 200
     assert login_response.json()["access_token"]
-    assert login_response.json()["refresh_token"]
+    assert "refresh_token" not in login_response.json()
 
     db = SessionLocal()
     try:
@@ -80,20 +80,42 @@ def test_password_hashing_rejects_values_beyond_bcrypt_byte_limit() -> None:
         get_password_hash("A1!" + "a" * 70)
 
 
-def test_access_and_refresh_token_creation_include_unique_identifiers_and_expiration() -> None:
+def test_access_token_creation_includes_unique_identifiers_and_expiration() -> None:
     first_access = create_access_token("user-1")
     second_access = create_access_token("user-1")
-    refresh = create_refresh_token("user-1")
 
     first_payload = jwt.decode(first_access, settings.jwt_secret, algorithms=["HS256"])
     second_payload = jwt.decode(second_access, settings.jwt_secret, algorithms=["HS256"])
-    refresh_payload = jwt.decode(refresh, settings.jwt_secret, algorithms=["HS256"])
 
     assert first_payload["typ"] == "access"
-    assert refresh_payload["typ"] == "refresh"
     assert first_payload["jti"] != second_payload["jti"]
     assert first_payload["exp"] > int(datetime.now(timezone.utc).timestamp())
-    assert refresh_payload["exp"] > first_payload["exp"]
+
+
+def test_login_session_expiration_matches_short_lived_access_token_policy() -> None:
+    client.post(
+        "/auth/register",
+        json={"email": "session-expiry@example.com", "password": "StrongPass123!"},
+    )
+
+    before_login = datetime.now(timezone.utc)
+    response = client.post(
+        "/auth/login",
+        json={"email": "session-expiry@example.com", "password": "StrongPass123!"},
+    )
+
+    assert response.status_code == 200
+    db = SessionLocal()
+    try:
+        session = db.query(UserSession).one()
+        expires_at = session.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+    finally:
+        db.close()
+
+    expected_seconds = settings.access_token_expire_minutes * 60
+    assert expected_seconds - 5 <= (expires_at - before_login).total_seconds() <= expected_seconds + 5
 
 
 def test_login_failure_with_invalid_password() -> None:

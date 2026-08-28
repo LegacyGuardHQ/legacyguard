@@ -2,13 +2,14 @@
 
 LegacyGuard is a privacy-first personal asset continuity and legacy-planning application. It helps people organize assets, beneficiaries, important documents, and discovery results so that information can be reviewed and maintained in one workspace.
 
-> **Development status:** Development is active, but LegacyGuard is not approved for real personal, financial, medical, estate, credential, or other sensitive data. Use synthetic data only. No public production application is currently available.
+> **Alpha status:** Development is active, but LegacyGuard is not production-ready or approved for real personal, financial, medical, estate, credential, or other sensitive data. Use synthetic data only. No public production application is currently available.
 
 LegacyGuard is software, not legal, financial, tax, medical, or estate-planning advice. Consult qualified professionals for decisions in those areas.
 
-Development is currently hosted in a recovery repository while restoration of the original repository remains unresolved. The permanent canonical repository location has not been decided.
+The canonical source repository is `LegacyGuard/legacyguard`. It remains private
+while public-launch blockers and owner decisions are resolved.
 
-## Implemented on master
+## Implemented in the alpha
 
 The current `master` branch includes:
 
@@ -55,8 +56,10 @@ cp .env.example .env
 ```
 
 Runtime-only environments install `requirements.txt`; that file intentionally
-excludes validation frameworks and the local S3 emulator. The production-style
-smoke harness uses `requirements-smoke.txt`, which adds only its HTTP test client.
+excludes validation frameworks and the local S3 emulator. The isolated
+deployment smoke harness uses `requirements-smoke.txt`, which adds only its HTTP
+test client. That harness uses synthetic SQLite/local-storage settings and is
+not evidence of production readiness.
 
 On Windows Command Prompt, use `copy .env.example .env`. Replace every `CHANGE_ME` value in `.env`; generate the Fernet key using the command documented in the template. The template is for development only and is intentionally not a usable production configuration.
 
@@ -67,7 +70,7 @@ Get-ChildItem Env:DEBUG
 Remove-Item Env:DEBUG -ErrorAction SilentlyContinue
 ```
 
-`Remove-Item Env:DEBUG` affects only the current PowerShell process; it does not delete a user-level or system-level setting. Other recognized LegacyGuard variables can override the local file in the same way: `APP_NAME`, `ENVIRONMENT`, `DATABASE_URL`, `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_POOL_TIMEOUT_SECONDS`, `DATABASE_POOL_RECYCLE_SECONDS`, `SECRET_KEY`, `ENCRYPTION_KEY`, `JWT_SECRET`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `CORS_ALLOWED_ORIGINS`, `DOCUMENT_STORAGE_ROOT`, and `DISCOVERY_STALE_SCAN_THRESHOLD_SECONDS`. Inspect any unexpected local behavior with `Get-ChildItem Env:` and remove only the conflicting variable from the current process, using the same command pattern, so the synthetic `.env` value is used.
+`Remove-Item Env:DEBUG` affects only the current PowerShell process; it does not delete a user-level or system-level setting. Other recognized LegacyGuard variables can override the local file in the same way: `APP_NAME`, `ENVIRONMENT`, `DATABASE_URL`, `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_POOL_TIMEOUT_SECONDS`, `DATABASE_POOL_RECYCLE_SECONDS`, `SECRET_KEY`, `ENCRYPTION_KEY`, `JWT_SECRET`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `CORS_ALLOWED_ORIGINS`, `DOCUMENT_STORAGE_ROOT`, `DOCUMENT_STORAGE_BACKEND`, and `DISCOVERY_STALE_SCAN_THRESHOLD_SECONDS`. Inspect any unexpected local behavior with `Get-ChildItem Env:` and remove only the conflicting variable from the current process, using the same command pattern, so the synthetic `.env` value is used.
 
 Apply migrations and start the API:
 
@@ -115,11 +118,11 @@ PostgreSQL migration and test coverage also runs in Backend CI. See [the deploym
 
 ## Contributing and project information
 
-LegacyGuard is licensed under the [GNU Affero General Public License v3.0](LICENSE). Outside code contributions are not yet open until contribution terms are published, but proposals may use the repository's guided issue templates when accessible.
+LegacyGuard is licensed under the [GNU Affero General Public License v3.0](LICENSE). Focused proposals are welcome, but outside code contributions are not yet accepted because contribution ownership terms remain an owner decision. See the contributing guide before beginning work.
 
 - [Contributing guidance](CONTRIBUTING.md)
 - [Project state](docs/PROJECT_STATE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Changelog](CHANGELOG.md)
 - [Support policy](SUPPORT.md)
-- [Public project information site](https://legacyguard-continuity.james23sf.chatgpt.site/)
+- [Funding and sponsor ethics](FUNDING.md)

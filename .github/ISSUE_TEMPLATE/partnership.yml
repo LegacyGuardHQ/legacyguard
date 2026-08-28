@@ -1,7 +1,7 @@
 name: Partnership or pilot idea
 description: Propose a mission-aligned collaboration without sharing confidential information.
 title: "[Partnership]: "
-labels: ["partnership", "needs-triage"]
+labels: ["question"]
 body:
   - type: markdown
     attributes:

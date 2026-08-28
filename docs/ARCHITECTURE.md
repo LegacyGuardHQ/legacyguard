@@ -1,116 +1,129 @@
-# LegacyGuard Architecture Plan
+# LegacyGuard Architecture
 
-## 1. Application Purpose
-LegacyGuard is a secure personal asset continuity and legacy planning system designed to help individuals document their financial, legal, digital, and personal assets alongside beneficiary instructions and important documents. The system enables trusted parties to locate critical information and act when the owner becomes incapacitated or passes away.
+## Status and scope
 
-## 2. System Design
-The application will follow a modular, privacy-first architecture with:
-- A secure web application for users to manage their legacy plan
-- A backend service for authentication, authorization, storage, and auditability
-- A relational database to store structured plan data
-- Optional AI-assisted features for summaries, guidance, and document categorization
+LegacyGuard is an alpha, privacy-first personal asset continuity and
+legacy-planning application. The implemented system supports one authenticated
+owner per account. Trusted-contact, emergency-access, multi-household, and
+production operations described as future work are not current capabilities.
 
-The system will prioritize:
-- Confidentiality of personal data
-- Strong access control and audit trails
-- Clear separation of user data and operational metadata
-- Extensibility for future integrations and admin workflows
+The repository is suitable for development with synthetic data only. A public
+source release is separate from approval to operate a production service with
+real sensitive information.
 
-## 3. Technology Stack
-Suggested initial stack:
-- Frontend: React or Next.js with TypeScript
-- Backend: Node.js with NestJS or Express
-- Database: PostgreSQL
-- Authentication: OAuth2 / OpenID Connect with email/password fallback or magic links
-- File storage: Private object storage or encrypted file storage
-- Infrastructure: Docker, CI/CD, cloud hosting
-- Testing: Jest, Playwright, Supertest
+## Technology stack
 
-## 4. Frontend Architecture
-The frontend should provide a dashboard-oriented experience with modules for:
-- Overview and status summary
-- Asset inventory management
-- Beneficiary management
-- Document vault and uploads
-- Task and instruction tracking
-- Security and access review
+### Frontend
 
-Recommended frontend structure:
-- App shell and navigation
-- Feature-based modules for assets, beneficiaries, documents, and reports
-- Reusable form components and data tables
-- Role-based UI views for owner and trusted contacts
-- Secure handling of sensitive forms and file metadata
+- React 19 and TypeScript
+- React Router 7
+- Vite 8
+- TanStack Query 5
+- Vitest 4, Testing Library, and jsdom
 
-## 5. Backend Architecture
-The backend should expose a REST API or GraphQL layer with service-based modules:
-- Authentication and session management
-- User profile and settings management
-- Asset management service
-- Beneficiary management service
-- Document metadata and storage service
-- Task and instruction service
-- Reporting and audit service
-- AI orchestration service
+The browser application lives under `frontend/src`. It uses a shared API client
+and protected routes. Server state is managed through TanStack Query. The
+browser stores only the short-lived access token in `sessionStorage`; no refresh
+workflow is implemented.
 
-Core design principles:
-- Stateless services where possible
-- Strong input validation and authorization checks
-- Event-driven logging for security-sensitive actions
-- Clear domain boundaries for compliance and maintenance
+### Backend
 
-## 6. Database Architecture
-The database should be relational and support auditing, permissions, and historical tracing. Each core entity should store:
-- User-owned records
-- Ownership and access metadata
-- Timestamps for creation and updates
-- Optional status and archival fields
+- Python 3.12
+- FastAPI REST API
+- Pydantic request and response schemas
+- SQLAlchemy 2 and Alembic migrations
+- PyJWT access tokens with server-side session records
+- Fernet-based application encryption
+- Pytest
 
-Recommended data model strategy:
-- One-to-many relationships from users to assets, beneficiaries, documents, tasks, reports, and audit logs
-- Foreign keys for ownership and child record integrity
-- Soft delete support for recovery and compliance purposes
-- Separate audit table for immutable action history
+Backend code lives under `backend/app`, with routes, schemas, models, services,
+and security boundaries kept separate where practical.
 
-## 7. Security Model
-Security must be treated as a first-class requirement.
+### Persistence
 
-Key protections:
-- Secure authentication with MFA support
-- Encryption of sensitive data at rest and in transit
-- Least-privilege access control
-- Explicit ownership boundaries per user
-- Audit logging of all privileged actions
-- Backup and recovery strategy
-- Secure handling of uploaded documents and PII
+- SQLite is supported only for local development and isolated tests.
+- Production configuration requires PostgreSQL through Psycopg 3.
+- Local document storage is supported only for development and tests.
+- Production configuration requires private S3-compatible object storage.
 
-Security controls should include:
-- Role-based access control for account owners and trusted contacts
-- Explicit consent and access review flows
-- Optional emergency access workflows with verification
-- Session expiration and revocation support
+Production configuration rejects SQLite and local document storage. Those
+checks do not by themselves establish production readiness.
 
-## 8. AI Integration Design
-AI capabilities should be optional and assistive rather than authoritative.
+## Request and authorization boundaries
 
-Possible AI features:
-- Summarizing account and asset inventories
-- Suggesting missing beneficiary or document categories
-- Drafting instructions and narrative summaries
-- Classifying uploaded documents by type
-- Producing plain-language report summaries
+FastAPI routes authenticate access tokens and resolve the associated active
+server-side session. Owner-controlled reads and mutations are scoped by both
+record identifier and authenticated `user_id`. Generic authentication and
+not-found responses are used where more detailed errors could reveal account
+or record existence.
 
-Implementation approach:
-- AI features should run through a controlled service layer
-- User data should be minimized before sending to external AI providers
-- Sensitive content should be filtered or redacted where appropriate
-- AI output should be reviewable and editable by the user
+The current API surface includes:
 
-## 9. Future Expansion Options
-Future phases could include:
-- Trusted contact workflows and emergency access requests
-- Digital account credential vault integration
-- Legal document templates and e-signature support
-- Mobile applications for guardians or executors
-- Multi-user household or family estate planning support
-- Compliance reporting and export features
+- registration, login, logout, session listing, and session revocation
+- assets and asset details
+- beneficiaries and asset-beneficiary links
+- document metadata and encrypted upload
+- Discovery scans, reports, findings, review queues, and manual conversion of a
+  confirmed finding into an asset that remains marked for review
+- liveness and readiness probes
+
+There is no current administrator API. FastAPI OpenAPI documentation is part of
+the development surface and must not be treated as a security boundary.
+
+## Data and document protection
+
+Designated sensitive database fields are encrypted before persistence. Document
+content uses a generated per-document Fernet data key; encrypted content is
+written to the selected storage backend and the key reference is protected by
+the application encryption key. Opaque storage locators, encrypted key
+references, ciphertext size, version, and integrity metadata are recorded in
+the database.
+
+Uploads are bounded and validated for filename, extension, declared MIME type,
+and selected magic bytes before encryption. In production, uploads return HTTP
+503 unless a malware scanner is configured. The repository provides only the
+scanner interface; a real scanner and quarantine workflow remain operational
+requirements.
+
+See [DATA_PROTECTION.md](DATA_PROTECTION.md) for field-level boundaries and
+[DEPLOYMENT.md](DEPLOYMENT.md) for deployment requirements.
+
+## Authentication and session lifecycle
+
+Successful login returns one short-lived HS256 access token containing a unique
+session identifier (`jti`). The server stores the same identifier in a
+revocable session record. The session expires with the access-token policy.
+Protected routes accept access tokens only.
+
+Refresh tokens and token rotation are not implemented. A new login is required
+after access-token expiry. MFA is also not implemented.
+
+Registration attempts and failed-login attempts use database-backed counters.
+The current client key is derived from the request peer address, so trusted
+proxy handling and edge/distributed abuse protection remain deployment work.
+
+## Discovery model
+
+Discovery analyzes encrypted document content only after authorization and
+decryption inside the service boundary. Processing is bounded, and findings are
+signals for human review rather than proof of identity, ownership, value, or
+legal validity. Assets are never created automatically from a finding.
+
+Background Discovery work currently runs in-process. A durable queue, worker
+isolation, and production workload controls are future operational work.
+
+## Operational boundaries and known gaps
+
+Before any real-data service is offered, operators still need:
+
+- real malware scanning and quarantine
+- coordinated PostgreSQL/object-storage backup and restore
+- managed encryption-key recovery and rotation
+- trusted ingress, HTTPS, and proxy configuration
+- distributed rate limiting and abuse monitoring
+- privacy-safe logs, metrics, alerts, and incident response
+- retention, deletion, and backup-expiry policies
+- independent security, privacy, accessibility, and legal review
+
+Source availability, passing tests, encryption features, or a version tag must
+not be described as production approval.

@@ -400,6 +400,56 @@ def _upload_document(token: str, document_id: str, content: bytes = b"%PDF-1.4\n
     )
 
 
+def test_production_upload_rejects_missing_malware_scanner(monkeypatch) -> None:
+    token = _token("upload-production-no-scanner@example.com")
+    document = _post_document(token)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    monkeypatch.setattr(documents_api.settings, "environment", "production")
+    monkeypatch.setattr(documents_api, "malware_scanner", None)
+
+    response = _upload_document(token, document_id)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Document uploads are unavailable"
+    db = SessionLocal()
+    try:
+        saved = db.query(Document).filter(Document.id == document_id).one()
+        assert saved.storage_reference_encrypted is None
+        assert saved.encryption_key_reference_encrypted is None
+    finally:
+        db.close()
+
+
+def test_production_upload_scans_before_encryption_and_storage(monkeypatch) -> None:
+    class RecordingScanner:
+        def __init__(self) -> None:
+            self.scanned: list[bytes] = []
+
+        def scan(self, content: bytes) -> None:
+            self.scanned.append(content)
+
+    token = _token("upload-production-scanner@example.com")
+    document = _post_document(token)
+    assert document.status_code == 201
+    document_id = document.json()["id"]
+    plaintext = b"%PDF-1.4\nscanned synthetic document"
+    scanner = RecordingScanner()
+    monkeypatch.setattr(documents_api.settings, "environment", "production")
+    monkeypatch.setattr(documents_api, "malware_scanner", scanner)
+    locator: str | None = None
+
+    try:
+        response = _upload_document(token, document_id, content=plaintext)
+
+        assert response.status_code == 200
+        assert scanner.scanned == [plaintext]
+        locator = _storage_locator(document_id)
+    finally:
+        if locator is not None:
+            documents_api.document_storage.delete_permanently(locator)
+
+
 def test_upload_storage_builder_uses_configured_root(monkeypatch, tmp_path) -> None:
     configured_root = tmp_path / "configured-upload-storage"
     monkeypatch.setattr(documents_api.settings, "document_storage_root", str(configured_root))

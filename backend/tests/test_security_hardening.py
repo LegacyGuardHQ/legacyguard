@@ -1,4 +1,6 @@
 import os
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +12,8 @@ os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
 from app.main import app
+from app.database.connection import SessionLocal, engine
+from app.models.login_rate_limit_attempt import LoginRateLimitAttempt
 from app.services.database_rate_limit import DatabaseLoginRateLimiter
 from app.services.rate_limit import rate_limiter
 
@@ -174,6 +178,62 @@ def test_registration_rate_limit_blocks_account_creation_bursts() -> None:
     assert blocked.status_code == 429
     assert blocked.json()["detail"] == "Too many registration attempts"
     assert int(blocked.headers["retry-after"]) > 0
+
+    db = SessionLocal()
+    try:
+        second_process = DatabaseLoginRateLimiter()
+        allowed, retry_after = second_process.allow(db, "register:testclient")
+    finally:
+        db.close()
+
+    assert allowed is False
+    assert retry_after > 0
+
+
+def test_registration_attempt_is_committed_before_allowance_decision() -> None:
+    first_process = DatabaseLoginRateLimiter(max_attempts=1)
+    second_process = DatabaseLoginRateLimiter(max_attempts=1)
+
+    first_db = SessionLocal()
+    second_db = SessionLocal()
+    try:
+        first_allowed, _ = first_process.record_and_allow(first_db, "register:atomic-client")
+        second_allowed, retry_after = second_process.record_and_allow(second_db, "register:atomic-client")
+    finally:
+        first_db.close()
+        second_db.close()
+
+    assert first_allowed is True
+    assert second_allowed is False
+    assert retry_after > 0
+
+
+@pytest.mark.skipif(engine.dialect.name != "postgresql", reason="requires PostgreSQL transaction advisory locks")
+def test_concurrent_registration_attempts_are_serialized_in_postgresql() -> None:
+    client_key = f"register:parallel-{uuid.uuid4()}"
+
+    def attempt() -> bool:
+        db = SessionLocal()
+        try:
+            allowed, _ = DatabaseLoginRateLimiter().record_and_allow(db, client_key)
+            return allowed
+        finally:
+            db.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            results = list(pool.map(lambda _: attempt(), range(10)))
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(LoginRateLimitAttempt).filter(
+                LoginRateLimitAttempt.client_key_hash == DatabaseLoginRateLimiter._hash_key(client_key)
+            ).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
+
+    assert sum(results) == 5
 
 
 @pytest.mark.parametrize(

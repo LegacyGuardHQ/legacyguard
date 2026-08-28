@@ -2,9 +2,9 @@
 
 ## Repository status
 
-Development is currently hosted in a private recovery repository while restoration of the original `LegacyGuard/legacyguard` repository remains unresolved. This is an operational hosting status, not a decision about the permanent canonical repository name or owner.
-
-Recovery-repository PRs #5 through #12 are merged into `master`. PRs #5 through #10 added the Asset Management UI, Beneficiary Management UI, Document Vault UI, Workspace Dashboard, deployment-aware Alembic database configuration, and PostgreSQL compatibility. PR #11 prepared public/canonical repository onboarding documentation, and PR #12 hardened GitHub security automation.
+The canonical repository is `LegacyGuard/legacyguard`, with `master` as the
+default branch. The repository remains private while public-launch blockers and
+owner decisions are resolved.
 
 ## Current product capabilities
 
@@ -24,15 +24,23 @@ Manual conversion requires a confirmed finding and produces an asset that remain
 
 ## Public source repository readiness
 
-The source repository is being prepared for possible public visibility. CI, documentation, licensing, contribution boundaries, history safety, security reporting, and repository settings are evaluated separately from application production readiness.
-
-The repository remains private. Its permanent location and public-visibility decision are deferred until the original repository restoration outcome is known.
+The source repository is being prepared for public visibility, but it is not
+yet approved for publication. History privacy, a verified private security
+contact, legal/provenance decisions, external website corrections, and final
+repository-setting verification remain launch gates.
 
 ## Production application readiness
 
 The application is **not ready or approved for real personal or sensitive data**, and no public production application is available. Use synthetic data only.
 
-Production readiness still requires managed encrypted document storage, malware scanning and quarantine, tested backup/restore and key recovery, managed PostgreSQL infrastructure, trusted ingress/proxy configuration, production rate limiting, privacy-safe observability, staging and security testing, production domains, managed key rotation, retention/deletion policies, and independent security/privacy review.
+Production configuration now fails closed unless PostgreSQL and object storage
+are selected, and production uploads are unavailable unless a malware scanner
+is configured. Production readiness still requires a real scanner and
+quarantine workflow, tested backup/restore and key recovery, managed
+infrastructure, trusted ingress/proxy configuration, distributed proxy-aware
+rate limiting, privacy-safe observability, staging and security testing,
+production domains, managed key rotation, retention/deletion policies, and
+independent security/privacy review.
 
 ## Current API areas
 

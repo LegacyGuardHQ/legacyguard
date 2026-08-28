@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: LegacyGuard public project site
-    url: https://legacyguard-continuity.james23sf.chatgpt.site/
-    about: Learn about the mission, roadmap, and safe ways to support the project.
+  - name: Report a security vulnerability
+    url: https://github.com/LegacyGuard/legacyguard/security/policy
+    about: Do not open a public issue. Follow the private-reporting status and instructions in the security policy.

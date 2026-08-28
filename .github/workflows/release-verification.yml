@@ -108,5 +108,5 @@ jobs:
           export SECRET_KEY
           export JWT_SECRET
           PYTHONPATH=. python -m alembic upgrade head
-      - name: Run production smoke test
+      - name: Run isolated deployment smoke test
         run: python ../scripts/production_smoke_test.py

@@ -6,6 +6,13 @@ Funding is intended to convert tested software into a responsibly operated
 service. LegacyGuard should not accept sensitive continuity information on an
 unsafe free hosting arrangement.
 
+LegacyGuard is alpha software and does not currently have a verified public
+sponsorship account. When a verified channel is available, it will be added to
+GitHub's native funding configuration and this document. Until then, do not
+send money or payment details in response to an issue, pull request,
+discussion, or unsolicited message. Contributions are not represented as
+tax-deductible.
+
 ## Priorities
 
 Funds should support dated, verifiable milestones in this order:

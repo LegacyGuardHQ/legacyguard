@@ -138,11 +138,11 @@ def test_auth_failure_logging_redacts_sensitive_fields() -> None:
     assert "[REDACTED]" in messages
 
 
-def test_production_smoke_script_runs() -> None:
+def test_isolated_deployment_smoke_script_runs() -> None:
     env = os.environ.copy()
     env.update(
         {
-            "ENVIRONMENT": "production",
+            "ENVIRONMENT": "testing",
             "DEBUG": "false",
             "DATABASE_URL": "sqlite:///./legacyguard.db",
             "SECRET_KEY": "a-very-long-production-secret-123",
@@ -161,4 +161,4 @@ def test_production_smoke_script_runs() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "smoke test passed" in result.stdout.lower()
+    assert "isolated deployment smoke test passed" in result.stdout.lower()

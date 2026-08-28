@@ -1,7 +1,7 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 const ACCESS_TOKEN_KEY = 'legacyguard.access_token';
-const REFRESH_TOKEN_KEY = 'legacyguard.refresh_token';
+const LEGACY_REFRESH_TOKEN_KEY = 'legacyguard.refresh_token';
 
 export class ApiError extends Error {
   status: number;
@@ -26,17 +26,18 @@ export class ApiError extends Error {
 }
 
 export function getAccessToken(): string | null {
+  sessionStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
   return sessionStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-export function saveTokens(accessToken: string, refreshToken: string): void {
+export function saveAccessToken(accessToken: string): void {
   sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-  sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  sessionStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
 }
 
 export function clearTokens(): void {
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+  sessionStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
 }
 
 async function parseError(response: Response): Promise<ApiError> {

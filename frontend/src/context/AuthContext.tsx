@@ -3,7 +3,7 @@ import {
   ApiError,
   clearTokens,
   getAccessToken,
-  saveTokens,
+  saveAccessToken,
 } from '../api/client';
 import {
   fetchCurrentUser,
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const tokens = await loginRequest(email, password);
-    saveTokens(tokens.access_token, tokens.refresh_token);
+    saveAccessToken(tokens.access_token);
     try {
       setUser(await fetchCurrentUser());
       setSessionError(null);

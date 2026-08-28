@@ -41,7 +41,7 @@ def make_database_url(db_path: Path) -> str:
 def make_env(db_path: Path, docs_root: Path) -> dict[str, str]:
     return {
         "DATABASE_URL": make_database_url(db_path),
-        "ENVIRONMENT": "production",
+        "ENVIRONMENT": "testing",
         "SECRET_KEY": "temporary-rc1-secret-key-123456",
         "JWT_SECRET": "temporary-rc1-jwt-secret-123456",
         "ENCRYPTION_KEY": Fernet.generate_key().decode("utf-8"),
@@ -96,7 +96,6 @@ def verify_smoke_equivalent(app_instance) -> dict[str, object]:
 
 
 def seed_test_data(env: dict[str, str]) -> tuple[str, str, str]:
-    clear_app_modules()
     os.environ.update(env)
     from app.services.document_storage import LocalDocumentStorage
 

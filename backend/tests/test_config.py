@@ -177,7 +177,7 @@ def test_object_storage_requires_https_outside_development_and_testing() -> None
         {
             "ENVIRONMENT": "production",
             "DEBUG": "false",
-            "DATABASE_URL": "sqlite:///./legacyguard.db",
+            "DATABASE_URL": "postgresql+psycopg://app:synthetic@db.example.invalid/legacyguard",
             "SECRET_KEY": "synthetic-production-secret-123456",
             "ENCRYPTION_KEY": EXPLICIT_ENCRYPTION_KEY,
             "JWT_SECRET": "synthetic-production-jwt-secret-123456",
@@ -189,6 +189,109 @@ def test_object_storage_requires_https_outside_development_and_testing() -> None
         clear=True,
     ):
         with pytest.raises(ValueError, match="must use HTTPS"):
+            Settings(_env_file=None)
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "sqlite:///:memory:",
+        "sqlite:///./legacyguard.db",
+        "mysql://app:synthetic@db.example.invalid/legacyguard",
+    ],
+)
+def test_production_requires_postgresql_with_psycopg(database_url: str) -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "production",
+            "DEBUG": "false",
+            "DATABASE_URL": database_url,
+            "SECRET_KEY": "synthetic-production-secret-123456",
+            "ENCRYPTION_KEY": EXPLICIT_ENCRYPTION_KEY,
+            "JWT_SECRET": "synthetic-production-jwt-secret-123456",
+            "CORS_ALLOWED_ORIGINS": "https://example.com",
+            "DOCUMENT_STORAGE_BACKEND": "OBJECT",
+            "DOCUMENT_OBJECT_BUCKET": "synthetic-documents",
+        },
+        clear=True,
+    ):
+        with pytest.raises(ValueError, match="production database_url must use PostgreSQL"):
+            Settings(_env_file=None)
+
+
+def test_production_requires_object_document_storage() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "production",
+            "DEBUG": "false",
+            "DATABASE_URL": "postgresql+psycopg://app:synthetic@db.example.invalid/legacyguard",
+            "SECRET_KEY": "synthetic-production-secret-123456",
+            "ENCRYPTION_KEY": EXPLICIT_ENCRYPTION_KEY,
+            "JWT_SECRET": "synthetic-production-jwt-secret-123456",
+            "CORS_ALLOWED_ORIGINS": "https://example.com",
+            "DOCUMENT_STORAGE_BACKEND": "LOCAL",
+        },
+        clear=True,
+    ):
+        with pytest.raises(ValueError, match="production document_storage_backend must be OBJECT"):
+            Settings(_env_file=None)
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "postgres://app:synthetic@db.example.invalid/legacyguard",
+        "postgresql://app:synthetic@db.example.invalid/legacyguard",
+        "postgresql+psycopg://app:synthetic@db.example.invalid/legacyguard",
+    ],
+)
+def test_production_accepts_supported_postgresql_urls_with_object_storage(database_url: str) -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "production",
+            "DEBUG": "false",
+            "DATABASE_URL": database_url,
+            "SECRET_KEY": "synthetic-production-secret-123456",
+            "ENCRYPTION_KEY": EXPLICIT_ENCRYPTION_KEY,
+            "JWT_SECRET": "synthetic-production-jwt-secret-123456",
+            "CORS_ALLOWED_ORIGINS": "https://example.com",
+            "DOCUMENT_STORAGE_BACKEND": "OBJECT",
+            "DOCUMENT_OBJECT_BUCKET": "synthetic-documents",
+        },
+        clear=True,
+    ):
+        configured = Settings(_env_file=None)
+
+    assert configured.database_url == database_url
+    assert configured.document_storage_backend == "OBJECT"
+
+
+@pytest.mark.parametrize("environment", ["prod", "sandbox", "", "   "])
+def test_unknown_environment_values_are_rejected(environment: str) -> None:
+    with patch.dict(os.environ, {"ENVIRONMENT": environment}, clear=True):
+        with pytest.raises(ValueError, match="environment"):
+            Settings(_env_file=None)
+
+
+def test_production_environment_is_normalized_before_safeguard_checks() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": " Production ",
+            "DEBUG": "false",
+            "DATABASE_URL": "sqlite:///./legacyguard.db",
+            "SECRET_KEY": "synthetic-production-secret-123456",
+            "ENCRYPTION_KEY": EXPLICIT_ENCRYPTION_KEY,
+            "JWT_SECRET": "synthetic-production-jwt-secret-123456",
+            "CORS_ALLOWED_ORIGINS": "https://example.com",
+            "DOCUMENT_STORAGE_BACKEND": "LOCAL",
+        },
+        clear=True,
+    ):
+        with pytest.raises(ValueError, match="production database_url must use PostgreSQL"):
             Settings(_env_file=None)
 
 

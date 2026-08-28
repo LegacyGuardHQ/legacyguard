@@ -5,11 +5,12 @@ welcomes focused contributions from developers, security reviewers, designers,
 documentation writers, accessibility specialists, and mission-aligned partners.
 
 LegacyGuard is licensed under the GNU Affero General Public License v3.0
-(AGPL-3.0) — see [LICENSE](LICENSE). Contribution terms have not yet been
-published. Until they are, maintainers may discuss and review proposals but
-must not merge outside code or other copyrightable contributions. Do not
-begin substantial work without written confirmation that contribution intake
-is open.
+(AGPL-3.0) — see [LICENSE](LICENSE). Small, clearly scoped proposals are
+welcome through the guided issue process. Contribution ownership terms have
+not yet been published, so maintainers must not merge outside code or other
+copyrightable contributions until the owner selects and documents an intake
+policy. Do not begin substantial work without written confirmation that
+contribution intake is open.
 
 ## Before you begin
 
@@ -69,7 +70,8 @@ for documentation-only changes, but state exactly what you validated.
   impact are explained.
 - Write plain-language documentation for behavior users must understand.
 
-When contribution intake opens, every contribution will be governed by the
-repository's AGPL-3.0 license (see [LICENSE](LICENSE)) and any additional
-contribution terms. Public visibility alone does not grant reuse rights
-beyond the license.
+The owner must decide whether contribution intake will use a DCO, CLA, or
+another documented approach before accepting outside copyrightable work. Once
+intake opens, accepted contributions will be governed by the repository's
+AGPL-3.0 license and the published contribution terms. Public visibility alone
+does not grant reuse rights beyond the license.

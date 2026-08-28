@@ -1,4 +1,4 @@
 -r requirements.txt
 
-# Production-style validation harness dependency; not required by the runtime.
+# Isolated synthetic deployment-smoke dependency; not required by the runtime.
 httpx==0.28.1

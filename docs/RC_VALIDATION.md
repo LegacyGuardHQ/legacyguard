@@ -1,11 +1,13 @@
 # Release candidate validation
 
-This checklist prepares `v1.1.0-rc.1`; it does not assert that the tag or release exists. Use synthetic data only. LegacyGuard is not approved for real sensitive data.
+This checklist records the validation model used for the published
+`v1.1.0-rc.1` alpha prerelease and later candidates. Use synthetic data only.
+LegacyGuard is not approved for real sensitive data.
 
 ## Identity and clean-clone checks
 
 - Record the approved commit SHA and clone the canonical repository into a new directory on both Windows and a Unix-like system.
-- After the future tag is created, fetch that exact tag, verify its SSH signature with the documented allowed signers, and confirm its peeled commit equals the approved SHA.
+- Fetch the exact candidate tag, verify its signature with the documented allowed signers, and confirm its peeled commit equals the approved SHA.
 - Follow `README.md` from the clean checkout. Replace every development placeholder with newly generated synthetic values.
 - On Windows PowerShell, begin with the documented environment preflight. Confirm an inherited `DEBUG` value is removed from the current process and that no other process environment variable unexpectedly overrides the synthetic `.env` configuration.
 - Confirm `app.version.__version__`, FastAPI OpenAPI metadata, `frontend/package.json`, and the root package entries in `frontend/package-lock.json` all report `1.1.0-rc.1`.
@@ -16,8 +18,15 @@ This checklist prepares `v1.1.0-rc.1`; it does not assert that the tag or releas
 - Install frontend dependencies with `npm ci`, run `npm test`, and run `npm run build`.
 - Create a fresh SQLite database and run `python -m alembic upgrade head`; start the backend and verify `/health/live` and `/health/ready`.
 - Create a disposable PostgreSQL database, run Alembic zero-to-head, verify migration readiness, and run the backend suite against PostgreSQL.
-- Start the backend with production-style synthetic secrets, PostgreSQL or a disposable SQLite database, and temporary document storage. Run `python scripts/production_smoke_test.py`.
-- Run `python scripts/rc1_recovery_verification.py` and require all backup, restore, rollback, and cleanup success markers.
+- Run `python scripts/production_smoke_test.py` as an isolated
+  `ENVIRONMENT=testing` packaging/runtime check with disposable SQLite and local
+  storage. Do not describe this as a production-configuration test.
+- Separately prove production configuration against disposable PostgreSQL and
+  object storage. Production must reject SQLite, local document storage, and
+  uploads without a configured malware scanner.
+- Run `python scripts/rc1_recovery_verification.py` under its isolated
+  `ENVIRONMENT=testing` configuration and require all backup, restore,
+  rollback, and cleanup success markers. This is not production recovery proof.
 
 ## Synthetic end-to-end validation
 
@@ -34,7 +43,8 @@ Using only disposable synthetic records, validate registration, login, Workspace
 
 The following cannot complete while the repository remains private or ineligible and must not block the private RC checkpoint:
 
-- enable CodeQL using the repository variable `CODEQL_ENABLED=true` and complete Python and JavaScript/TypeScript analysis
+- verify successful Python and JavaScript/TypeScript CodeQL analysis on the
+  exact candidate (custom workflows are active; default setup is unconfigured)
 - validate anonymous public cloning
 - validate public documentation, security-reporting, issue, and release links
 - validate final public repository identity and settings

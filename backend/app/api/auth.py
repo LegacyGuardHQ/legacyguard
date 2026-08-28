@@ -11,11 +11,10 @@ from app.models.user import User
 from app.models.user_security_settings import UserSecuritySettings
 from app.schemas.auth import LoginRequest, RegistrationResponse, RegisterRequest, TokenResponse, UserResponse
 from app.config import settings
-from app.security.auth import create_access_token, create_refresh_token, get_current_user, get_db, get_password_hash, verify_password
+from app.security.auth import create_access_token, get_current_user, get_db, get_password_hash, verify_password
 from app.services.audit import log_event
-from app.services.database_rate_limit import database_login_rate_limiter
+from app.services.database_rate_limit import database_login_rate_limiter, database_registration_rate_limiter
 from app.services.operational_logging import log_event as operational_log_event
-from app.services.rate_limit import rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 REGISTRATION_RESPONSE_MESSAGE = (
@@ -29,7 +28,7 @@ DUMMY_PASSWORD_HASH = "$2b$12$59YHxZXqz/v0i7CeWI1OMuV8fMRDgKqr/VY/eg/Xx70R2NMFIJ
 @router.post("/register", response_model=RegistrationResponse, status_code=status.HTTP_201_CREATED)
 def register_user(payload: RegisterRequest, db: Session = Depends(get_db), request: Request = None) -> RegistrationResponse:
     client_key = f"register:{request.client.host if request and request.client else 'unknown'}"
-    allowed, retry_after = rate_limiter.allow(client_key)
+    allowed, retry_after = database_registration_rate_limiter.record_and_allow(db, client_key)
     if not allowed:
         operational_log_event("registration_failure", event_category="auth", severity="warning", reason="rate_limited")
         raise HTTPException(
@@ -98,7 +97,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request
         user_id=user.id,
         token_identifier=token_identifier,
         created_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes),
         revoked_at=None,
         device_info=str(request.headers.get("user-agent", "unknown")) if request else "unknown",
     )
@@ -107,7 +106,6 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), request: Request
     db.commit()
     return {
         "access_token": create_access_token(user.id, token_identifier),
-        "refresh_token": create_refresh_token(user.id, token_identifier),
         "token_type": "bearer",
     }
 

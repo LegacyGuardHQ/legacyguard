@@ -21,14 +21,23 @@ env/
 # Test/cache
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.cache/
 
 # Node
 node_modules/
 dist/
 *.tsbuildinfo
+.vite/
+storybook-static/
+playwright-report/
+test-results/
 
 # IDE
 .vscode/
+.idea/
 
 # OS
 Thumbs.db
@@ -39,6 +48,30 @@ private_storage/
 
 # Logs
 *.log
+
+# Crash dumps and local backups
+core
+core.*
+*.dmp
+*.bak
+*.backup
+*.dump
+*.sql.gz
+*~
+
+# Temporary uploads
+backend/private_uploads/
+*.upload.tmp
+
+# Private key and certificate material
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*.jks
 
 # Development inventory files
 *_File_Map.txt

@@ -22,7 +22,7 @@ def _build_smoke_root() -> Path:
     return Path(tempfile.mkdtemp(prefix="legacyguard-smoke-", dir=tempfile.gettempdir()))
 
 
-def _build_runtime_environment(temp_root: Path) -> dict[str, str]:
+def _build_isolated_environment(temp_root: Path) -> dict[str, str]:
     database_url = f"sqlite:///{(temp_root / 'legacyguard.db').resolve().as_posix()}"
     document_storage_root = (temp_root / "documents").resolve()
     document_storage_root.mkdir(parents=True, exist_ok=True)
@@ -32,7 +32,7 @@ def _build_runtime_environment(temp_root: Path) -> dict[str, str]:
         "SECRET_KEY": "a-very-long-production-secret-123",
         "ENCRYPTION_KEY": Fernet.generate_key().decode("utf-8"),
         "JWT_SECRET": "a-very-long-production-jwt-secret-123",
-        "ENVIRONMENT": "production",
+        "ENVIRONMENT": "testing",
         "CORS_ALLOWED_ORIGINS": "https://example.com",
         "DEBUG": "false",
         "DOCUMENT_STORAGE_ROOT": str(document_storage_root),
@@ -42,7 +42,7 @@ def _build_runtime_environment(temp_root: Path) -> dict[str, str]:
 
 def run() -> None:
     temp_root = _build_smoke_root()
-    runtime_environment = _build_runtime_environment(temp_root)
+    runtime_environment = _build_isolated_environment(temp_root)
     os.environ.update(runtime_environment)
 
     from app.services.alembic_readiness import upgrade_database_to_head
@@ -69,7 +69,7 @@ def run() -> None:
     if not os.environ.get("LEGACYGUARD_SMOKE_ROOT"):
         shutil.rmtree(temp_root, ignore_errors=True)
 
-    print("smoke test passed")
+    print("isolated deployment smoke test passed")
 
 
 if __name__ == "__main__":

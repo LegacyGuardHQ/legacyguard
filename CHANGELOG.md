@@ -1,8 +1,26 @@
 # Changelog
 
-This file records notable changes supported by repository history. The release candidate below is being prepared and has not yet been tagged or published.
+This file records notable changes supported by repository history. LegacyGuard
+remains alpha software; a version tag does not indicate production approval.
 
-## 1.1.0-rc.1 - Unreleased release candidate
+## Unreleased
+
+### Public-launch safety
+
+- Require PostgreSQL/Psycopg and object document storage when
+  `ENVIRONMENT=production`.
+- Reject production document uploads when no malware scanner is configured.
+- Remove the unused refresh-token response and browser storage; authenticated
+  sessions now expire with their short-lived access token.
+- Move registration-attempt limiting from process memory to shared database
+  state while leaving trusted-proxy/edge enforcement as an operational task.
+- Correct public documentation to reflect alpha maturity, the canonical
+  repository, and unresolved production requirements.
+
+## 1.1.0-rc.1 - 2026-08-26 prerelease
+
+This prerelease is an alpha development snapshot. It is not a stable or
+production-ready release and includes no packaged release artifacts.
 
 ### Features
 
@@ -16,7 +34,7 @@ This file records notable changes supported by repository history. The release c
 - Bounded document upload reads, registration inputs, registration attempts, and concurrent Discovery scan processing.
 - Moved login-failure limiting to shared database state.
 - Corrected document storage so all relevant services honor the configured storage root.
-- Added dependency auditing, immutable GitHub Action pins, disabled checkout credential persistence, Dependabot, and a guarded CodeQL workflow. CodeQL remains disabled until repository eligibility and configuration permit it; no successful analysis is claimed.
+- Added dependency auditing, immutable GitHub Action pins, disabled checkout credential persistence, Dependabot, and custom CodeQL workflows. CodeQL analysis is active and successful on the canonical revision; GitHub default setup remains unconfigured.
 - Expanded backend and frontend regression coverage and corrected frontend CI reliability.
 
 ### Database
@@ -27,7 +45,7 @@ This file records notable changes supported by repository history. The release c
 
 ### Release and CI
 
-- Added backend and frontend release checks, an RC readiness gate, and production-style synthetic smoke testing.
+- Added backend and frontend release checks, an RC readiness gate, and isolated synthetic deployment smoke testing. The smoke harness does not prove production readiness.
 - Added public-readiness licensing, governance, contribution, support, issue, and security guidance.
 
 ### Compatibility notes
@@ -39,4 +57,6 @@ This file records notable changes supported by repository history. The release c
 
 ## v1.0.1
 
-`v1.0.1` is the latest existing tagged release. This changelog does not reconstruct release details that were not recorded at the time; consult the tag and its reachable Git history for the authoritative historical contents.
+`v1.0.1` is an earlier tagged release. This changelog does not reconstruct
+release details that were not recorded at the time; consult the tag and its
+reachable Git history for the authoritative historical contents.

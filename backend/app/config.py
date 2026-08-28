@@ -1,8 +1,11 @@
 import re
+from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, ValidationError, computed_field, model_validator
+from pydantic import Field, ValidationError, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.database.url import normalize_database_url
 
 DEV_ENCRYPTION_KEY = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
 MIN_SECRET_LENGTH = 24
@@ -22,8 +25,7 @@ class Settings(BaseSettings):
     encryption_key: str = DEV_ENCRYPTION_KEY
     jwt_secret: str = "legacyguard-dev-jwt-secret-123456"
     access_token_expire_minutes: int = 15
-    refresh_token_expire_days: int = 7
-    environment: str = "development"
+    environment: Literal["development", "testing", "staging", "production"] = "development"
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     document_storage_root: str | None = None
     document_storage_backend: str = Field(default="LOCAL", pattern=r"^(LOCAL|OBJECT)$")
@@ -43,10 +45,16 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    @field_validator("environment", mode="before")
+    @classmethod
+    def normalize_environment(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
     @model_validator(mode="after")
     def validate_required_keys(self) -> "Settings":
-        normalized_environment = self.environment.lower()
-        self.environment = normalized_environment
+        normalized_environment = self.environment
         self.document_storage_backend = self.document_storage_backend.upper()
 
         if normalized_environment != "testing":
@@ -68,8 +76,10 @@ class Settings(BaseSettings):
                 raise ValueError("Wildcard CORS origins are not allowed")
             if not self.cors_origins:
                 raise ValueError("cors_allowed_origins must be configured in production")
-            if self.database_url.startswith("sqlite:///:memory:"):
-                raise ValueError("production database_url must not use an in-memory database")
+            if not normalize_database_url(self.database_url).startswith("postgresql+psycopg://"):
+                raise ValueError("production database_url must use PostgreSQL with the psycopg driver")
+            if self.document_storage_backend != "OBJECT":
+                raise ValueError("production document_storage_backend must be OBJECT")
 
         if normalized_environment in {"production", "staging"}:
             if not re.search(r"[A-Za-z]", self.secret_key) or not re.search(r"\d", self.secret_key):

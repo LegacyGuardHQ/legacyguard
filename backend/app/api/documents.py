@@ -384,6 +384,12 @@ async def upload_encrypted_document_content(
     document = _get_owned_document(db, document_id, current_user.id)
     _validate_document_upload_lifecycle(db, document, current_user.id)
 
+    if settings.environment == "production" and malware_scanner is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document uploads are unavailable",
+        )
+
     try:
         content = await _read_bounded_upload(file)
         filename, _extension = validate_extension_and_mime(file.filename or "", file.content_type or "")

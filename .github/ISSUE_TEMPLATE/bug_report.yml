@@ -1,7 +1,7 @@
 name: Bug report
 description: Report a reproducible problem using synthetic data only.
 title: "[Bug]: "
-labels: ["bug", "needs-triage"]
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
@@ -30,7 +30,7 @@ body:
   - type: input
     attributes:
       label: Version or commit
-      placeholder: v1.0.1 or commit SHA
+      placeholder: v1.1.0-rc.1 or commit SHA
   - type: textarea
     attributes:
       label: Environment

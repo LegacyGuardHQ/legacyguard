@@ -34,9 +34,9 @@ Backend code lives under `backend/app`; backend tests live under `backend/tests`
 
 ### Frontend
 
-- React 18 and TypeScript
+- React 19 and TypeScript
 - Vite
-- React Router 6
+- React Router 7
 - TanStack Query 5
 - Vitest, Testing Library, and jsdom
 
@@ -44,7 +44,7 @@ Frontend code lives under `frontend/src`. Reuse the authenticated API client, qu
 
 ### CI and validation
 
-Pull requests to `master` run separate backend and frontend GitHub Actions workflows. Backend test jobs install `backend/requirements-test.txt` and run `python -m pytest`; runtime-only jobs install `backend/requirements.txt`. Frontend CI uses Node 18, runs `npm ci`, `npm test`, and `npm run build`.
+Pull requests to `master` run separate backend and frontend GitHub Actions workflows. Backend test jobs install `backend/requirements-test.txt` and run `python -m pytest`; runtime-only jobs install `backend/requirements.txt`. Frontend CI uses Node 24, runs `npm ci`, `npm test`, and `npm run build`.
 
 ## Privacy, security, and authorization rules
 
@@ -156,7 +156,12 @@ If a command is not run or fails, report that fact and the reason exactly. Do no
 
 `docs/PROJECT_STATE.md` is the operational milestone snapshot; `docs/ROADMAP.md` and architecture documents may describe longer-term or earlier plans. Reconcile them with current code and Git history.
 
-At the latest documented clean `master` snapshot, authentication, asset management, the document vault, discovery and review workflows, manual asset conversion, discovery dashboard contracts, discovery overview, scan history, scan detail, and CI were complete. The next documented milestone was Phase 4B.6, the Finding Detail, using existing backend APIs. Because active branches may already advance that state, never assume this remains the next task without checking.
+At the current documented `master` snapshot, authentication, asset management,
+the document vault, discovery and review workflows, manual asset conversion,
+discovery dashboards/history/detail, and CI are implemented for alpha testing.
+Public launch and production use remain separately gated. Never infer the next
+task from an old phase number without checking current code, history, and
+`docs/PROJECT_STATE.md`.
 
 Do not pull later roadmap items into the current milestone. In particular, do not add OCR, AI features, new backend endpoints, or automatic asset creation unless a newly approved milestone explicitly requires them and the privacy design is reviewed.
 ## Explicitly prohibited behavior

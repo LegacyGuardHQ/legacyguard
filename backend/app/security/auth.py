@@ -59,15 +59,6 @@ def create_access_token(subject: str, token_identifier: Optional[str] = None) ->
     )
 
 
-def create_refresh_token(subject: str, token_identifier: Optional[str] = None) -> str:
-    return _create_token(
-        subject=subject,
-        expires_delta=timedelta(days=settings.refresh_token_expire_days),
-        token_identifier=token_identifier,
-        token_type="refresh",
-    )
-
-
 def get_db() -> Session:
     db = SessionLocal()
     try:
