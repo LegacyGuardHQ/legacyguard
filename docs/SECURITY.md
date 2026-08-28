@@ -13,10 +13,9 @@ Do not disclose a suspected vulnerability, exploit, sensitive log, secret, or
 personal information in a public issue, discussion, pull request, website
 form, or social-media post.
 
-No dedicated private reporting address has been verified yet. The owner must
-establish and test one before public launch. Until then, the maintainer's public
-GitHub profile may be used only to request a private channel, without technical
-details or sensitive evidence.
+Send private reports to **legacyguard.project@gmail.com**, the project's
+dedicated security and operations mailbox (not a personal address). This
+mailbox is the fallback route whenever GitHub private reporting is unavailable.
 
 Immediately after the repository becomes public, the owner will enable and
 test **Report a vulnerability** on the repository's **Security** tab. If that

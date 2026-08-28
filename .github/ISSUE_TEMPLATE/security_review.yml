@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not disclose an exploitable vulnerability here. Follow docs/SECURITY.md for private reporting. This form is for review proposals, defense-in-depth work, and already-public security topics.
+        Do not disclose an exploitable vulnerability here. Email private reports to legacyguard.project@gmail.com and follow docs/SECURITY.md. This form is for review proposals, defense-in-depth work, and already-public security topics.
   - type: checkboxes
     attributes:
       label: Disclosure check

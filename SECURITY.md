@@ -21,12 +21,9 @@ Do not report a suspected vulnerability through a public GitHub issue,
 discussion, pull request, website form, or social-media post. Do not include
 vulnerability details in a public request for contact.
 
-LegacyGuard does not yet have a verified dedicated private reporting address.
-Before the repository becomes public, the owner must establish and test a
-private contact channel and replace this paragraph with that verified route.
-Until then, the maintainer's public GitHub profile may be used only to request
-a private channel. The initial request must not contain technical details,
-proof-of-concept code, secrets, logs, or personal information.
+Send private reports to **legacyguard.project@gmail.com**, the project's
+dedicated security and operations mailbox (not a personal address). This email
+is the fallback route whenever GitHub private reporting is unavailable.
 
 Immediately after the repository becomes public, the owner will enable and
 test GitHub private vulnerability reporting. When enabled, use **Report a

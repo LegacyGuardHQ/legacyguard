@@ -3,3 +3,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/LegacyGuard/legacyguard/security/policy
     about: Do not open a public issue. Follow the private-reporting status and instructions in the security policy.
+  - name: Private security report
+    url: mailto:legacyguard.project@gmail.com
+    about: Email the dedicated security and operations mailbox; do not file vulnerabilities publicly.
