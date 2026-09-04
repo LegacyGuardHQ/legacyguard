@@ -2,6 +2,11 @@
 
 ## Current state (2026-08-27)
 
+- Repository continuity: all future edits and verification use the canonical
+  `REDACTED_LOCAL_PATH` working copy on
+  `master`, verified at commit `8f96e1b519319248ef2ec60255bfa7f81a8db845`;
+  preserve the OneDrive reference copy and protected reconciliation-audit
+  directory as documented in [REPOSITORY_MAP.md](REPOSITORY_MAP.md).
 - Canonical repository: `LegacyGuard/legacyguard`
 - Audited baseline: `df05377b1cbec521d5c46b29ad2b7efc40f162ea`
 - Maturity: Alpha
