@@ -12,5 +12,6 @@ export default defineConfig({
     setupFiles: './src/tests/setup.ts',
     globals: true,
     css: true,
+    maxWorkers: 2,
   },
 });
