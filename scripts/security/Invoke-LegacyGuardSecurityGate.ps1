@@ -129,7 +129,13 @@ function Ensure-BackendTestEnvironment {
 function Get-RelativeRepositoryPath {
     param([string]$Path)
 
-    return [System.IO.Path]::GetRelativePath($RepoRoot, $Path).Replace('\', '/')
+    $repositoryRoot = ((Resolve-Path $RepoRoot).Path).TrimEnd('\') + '\'
+    $fullPath = (Resolve-Path $Path).Path
+    if (-not $fullPath.StartsWith($repositoryRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Path is outside the repository root: $Path"
+    }
+
+    return $fullPath.Substring($repositoryRoot.Length).Replace('\', '/')
 }
 
 function Test-ReviewedBanditFinding {
@@ -350,16 +356,15 @@ Invoke-GateStep "Local Secret Scan" {
     }
 
     $secretReportPath = Join-Path $ReportRoot "detect-secrets.json"
-    & $DetectSecrets scan `
+    $secretScanOutput = & $DetectSecrets scan `
         --all-files `
         --force-use-all-plugins `
-        --exclude-files '(^|[\\/])\.git([\\/]|$)|(^|[\\/])\.venv([\\/]|$)|(^|[\\/])__pycache__([\\/]|$)|(^|[\\/])\.pytest_cache([\\/]|$)|(^|[\\/])node_modules([\\/]|$)|(^|[\\/])docs[\\/]security-secrets-baseline\.json$|(^|[\\/])docs[\\/]security-secrets-reviewed\.json$' `
-        | Set-Content -Path $secretReportPath
-
+        --exclude-files '(^|[\\/])\.git([\\/]|$)|(^|[\\/])\.venv([\\/]|$)|(^|[\\/])__pycache__([\\/]|$)|(^|[\\/])\.pytest_cache([\\/]|$)|(^|[\\/])node_modules([\\/]|$)|(^|[\\/])docs[\\/]security-secrets-baseline\.json$|(^|[\\/])docs[\\/]security-secrets-reviewed\.json$'
     $secretScanExitCode = $LASTEXITCODE
     if ($secretScanExitCode -ne 0) {
         throw "detect-secrets execution failed with exit code $secretScanExitCode."
     }
+    [System.IO.File]::WriteAllText($secretReportPath, ($secretScanOutput -join [Environment]::NewLine))
 
     $secretReport = Get-Content $secretReportPath -Raw | ConvertFrom-Json
     $secretBaseline = Get-Content $SecretBaseline -Raw | ConvertFrom-Json
@@ -421,6 +426,17 @@ Invoke-GateStep "Local Secret Scan" {
             throw "Reviewed secret manifest entry does not exactly match the machine baseline candidate inventory."
         }
         $reviewedFindings.Add($entry)
+    }
+    foreach ($finding in $baselineFindings) {
+        $reviewedMatches = @($reviewedFindings | Where-Object {
+            $_.type -eq $finding.type -and
+            $_.path.Replace('\', '/') -eq $finding.filename.Replace('\', '/') -and
+            $_.hashed_secret -eq $finding.hashed_secret -and
+            $_.line -eq $finding.line_number
+        })
+        if ($reviewedMatches.Count -ne 1) {
+            throw "Machine baseline candidate does not have exactly one reviewed disposition."
+        }
     }
     $unreviewed = @(
         $secretReport.results.PSObject.Properties | ForEach-Object {
