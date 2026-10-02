@@ -22,7 +22,7 @@ concurrency:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    # Disabled by default; set the repository variable CODEQL_ENABLED=true when code scanning is available.
+    # Enable only when GitHub Code Security is available; keep the repository variable false otherwise.
     if: ${{ vars.CODEQL_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     strategy:
