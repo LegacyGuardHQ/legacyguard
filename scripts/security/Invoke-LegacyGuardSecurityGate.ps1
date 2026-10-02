@@ -43,6 +43,52 @@ New-Item -ItemType Directory -Force $ReportRoot | Out-Null
 
 $Failures = [System.Collections.Generic.List[string]]::new()
 
+function Test-Python312Interpreter {
+    param([string]$Executable)
+
+    if (-not (Test-Path $Executable)) {
+        return $false
+    }
+
+    $version = & $Executable -c "import sys; print('%s.%s' % sys.version_info[:2])" 2>$null
+    return $LASTEXITCODE -eq 0 -and ($version | Select-Object -Last 1).Trim() -eq "3.12"
+}
+
+function Resolve-Python312 {
+    $launcher = Get-Command py -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -ne $launcher) {
+        $executable = & $launcher.Source -3.12 -c "import sys; print(sys.executable)" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $candidate = ($executable | Select-Object -Last 1).Trim()
+            if (Test-Python312Interpreter $candidate) {
+                return $candidate
+            }
+        }
+    }
+
+    foreach ($commandName in @("python3.12", "python")) {
+        $command = Get-Command $commandName -CommandType Application -ErrorAction SilentlyContinue
+        if ($null -ne $command -and (Test-Python312Interpreter $command.Source)) {
+            return $command.Source
+        }
+    }
+
+    throw "Python 3.12 is required for the local security gate. Install Python 3.12 and ensure it is available through 'py -3.12', 'python3.12', or a Python 3.12 'python' executable."
+}
+
+function Assert-Python312Environment {
+    param(
+        [string]$PythonPath,
+        [string]$EnvironmentName
+    )
+
+    if (-not (Test-Python312Interpreter $PythonPath)) {
+        $version = & $PythonPath -c "import sys; print('%s.%s' % sys.version_info[:2])" 2>$null
+        $foundVersion = if ($LASTEXITCODE -eq 0) { ($version | Select-Object -Last 1).Trim() } else { "unavailable" }
+        throw "$EnvironmentName must use Python 3.12; found Python $foundVersion at $PythonPath. Remove the temporary environment and rerun the gate."
+    }
+}
+
 function Invoke-GateStep {
     param(
         [string]$Name,
@@ -71,16 +117,13 @@ function Invoke-GateStep {
 }
 
 function Ensure-SastTools {
-    if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-        throw "Python is required to provision the local SAST tool environment."
-    }
-
     if (-not (Test-Path $ToolPython)) {
-        & python -m venv $ToolVenv
+        & $Python312 -m venv $ToolVenv
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to create the local SAST tool environment at $ToolVenv."
         }
     }
+    Assert-Python312Environment $ToolPython "The local SAST tool environment"
 
     $installedVersions = @{}
     foreach ($package in $ExpectedToolVersions.Keys) {
@@ -109,16 +152,13 @@ function Ensure-SastTools {
 }
 
 function Ensure-BackendTestEnvironment {
-    if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-        throw "Python is required to provision the backend test environment."
-    }
-
     if (-not (Test-Path $BackendTestPython)) {
-        & python -m venv $BackendTestVenv
+        & $Python312 -m venv $BackendTestVenv
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to create the backend test environment at $BackendTestVenv."
         }
     }
+    Assert-Python312Environment $BackendTestPython "The backend test environment"
 
     & $BackendTestPython -m pip install --disable-pip-version-check -r (Join-Path $Backend "requirements-test.txt")
     if ($LASTEXITCODE -ne 0) {
@@ -200,6 +240,7 @@ function Test-ReviewedSecretFinding {
     })
 }
 
+$Python312 = Resolve-Python312
 Ensure-SastTools
 
 if (-not $SkipTests) {
@@ -233,7 +274,7 @@ Invoke-GateStep "Semgrep SAST" {
         --metrics off `
         --json `
         --output (Join-Path $ReportRoot "semgrep.json") `
-        backend frontend
+        backend frontend scripts
 
     $semgrepExitCode = $LASTEXITCODE
     if ($semgrepExitCode -ne 0) {
@@ -322,6 +363,27 @@ Invoke-GateStep "Python Dependency Audit" {
 # ------------------------------------------------------------
 # 4. Frontend dependency audit
 # ------------------------------------------------------------
+
+Invoke-GateStep "Frontend Dependency Installation" {
+
+    Push-Location $Frontend
+
+    try {
+        npm ci
+        $npmCiExitCode = $LASTEXITCODE
+        if ($npmCiExitCode -ne 0) {
+            throw "npm ci failed with exit code $npmCiExitCode."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+if ($Failures.Contains("Frontend Dependency Installation")) {
+    Write-Host "[FAIL] Frontend checks stopped because npm ci failed."
+    exit 1
+}
 
 Invoke-GateStep "Frontend Dependency Audit" {
 
