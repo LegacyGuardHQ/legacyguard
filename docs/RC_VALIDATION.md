@@ -43,8 +43,12 @@ Using only disposable synthetic records, validate registration, login, Workspace
 
 The following cannot complete while the repository remains private or ineligible and must not block the private RC checkpoint:
 
-- verify successful Python and JavaScript/TypeScript CodeQL analysis on the
-  exact candidate (custom workflows are active; default setup is unconfigured)
+- run Python and JavaScript/TypeScript CodeQL only when GitHub Code Security is
+  available and the repository variable `CODEQL_ENABLED=true` is explicitly
+  set; otherwise the jobs skip and independent SAST checks remain the
+  security-analysis path
+- review branch-protection required checks when CodeQL is unavailable so skipped
+  CodeQL contexts are not mistaken for completed security analysis
 - validate anonymous public cloning
 - validate public documentation, security-reporting, issue, and release links
 - validate final public repository identity and settings
