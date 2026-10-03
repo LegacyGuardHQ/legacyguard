@@ -78,10 +78,26 @@ The local gate runs pinned Semgrep Community Edition, Bandit, and
 system temporary directory. Scanner reports are also written there and are not
 part of the repository.
 
-The gate parses scanner JSON itself. Only the exact reviewed file, rule, and
-line locations above are accepted; a new occurrence of a reviewed rule outside
-those locations remains a gate failure. Exactly 19 listed `B101` locations are
-currently recognized, preserving detection for other assertions elsewhere.
+The gate parses scanner JSON itself. Explicit Semgrep and Bandit acceptances in
+`scripts/security/Invoke-LegacyGuardSecurityGate.ps1` are keyed by scanner rule,
+repository-relative path, and a recorded SHA-256 source fingerprint; line
+numbers are used only to locate scanner-reported source, never to authorize a
+finding. The fingerprint helper independently reads the repository file and
+uses Python's AST to identify the smallest statement spanning the finding. It
+hashes that complete statement plus the immediately preceding and following
+statements in the same AST block. A compound neighboring statement contributes
+its header only, avoiding hashes of unrelated function bodies. The canonical
+input is labeled `legacyguard-reviewed-sast-source-v1`, encoded as UTF-8, and
+normalizes line endings only; source whitespace and code content are preserved.
+Scanner-provided source excerpts and fingerprints are not trusted.
+
+At runtime the gate validates every fingerprint's format and uniqueness,
+recomputes it from repository source, and requires every reviewed entry to
+match exactly once. Missing, malformed, duplicate, mismatched, unexpected, or
+stale reviewed entries fail closed. A new occurrence of a reviewed rule is
+never accepted by the existing entry. Exactly 19 `B101` assertions remain
+explicitly recognized, along with the individually reviewed `B608`, `B105`,
+`B106`, `B107`, and Semgrep migration findings.
 
 Secret scanning is local and offline with `detect-secrets`; it has no cloud
 upload or SaaS dependency. `docs/security-secrets-baseline.json` is the
