@@ -31,6 +31,6 @@ guaranteed response time.
 Feedback and issue reports do not authorize code contributions or transfer
 ownership. Pull requests are not accepted unless the project owner has
 specifically requested or authorized them. See [CONTRIBUTING.md](CONTRIBUTING.md).
-The existing license is in [LICENSE](LICENSE); publication authority and
-provenance remain subject to owner review. No verified public funding channel
+The repository license is AGPL-3.0 (see [LICENSE](LICENSE)); James Herrera is
+the current individual copyright holder. No verified public funding channel
 is represented by this support policy.

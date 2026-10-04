@@ -25,10 +25,13 @@ publish contribution and licensing terms and confirm the applicable intake
 process. No DCO or CLA has been selected. Do not begin implementation work on
 the assumption that a proposed contribution will be accepted.
 
-The repository contains an AGPL-3.0 `LICENSE`. Its presence does not settle
-the provenance or publication authority of every existing contribution, nor
-does it establish terms for future outside contributions. The owner must
-resolve those questions before accepting external code.
+The repository is licensed under AGPL-3.0 (see `LICENSE`), and James Herrera is
+the current individual copyright holder. Based on the repository provenance
+review and owner attestation, publication authority and provenance for the
+existing project materials have been reviewed; this is not formal legal
+clearance. The license does not establish terms for future outside
+contributions, which remain governed by the policy above. The owner must
+establish contribution terms before accepting external code.
 
 ## Development guidance for authorized work
 

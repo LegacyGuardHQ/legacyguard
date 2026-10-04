@@ -29,8 +29,10 @@ remediation is complete for the inspected current refs, but a publication
 review and owner decisions remain required. The owner-controlled, monitored
 mailbox documented in `SECURITY.md` is the verified private security-reporting
 route. GitHub Private Vulnerability Reporting is not confirmed enabled. The
-owner must resolve project provenance and publication authority, approve
-contribution intake terms, complete the pinned publication security gate, and review the
+owner has attested project provenance and publication authority and retained
+AGPL-3.0 (James Herrera is the current individual copyright holder; this is not
+formal legal clearance). The owner must still approve contribution intake
+terms, complete the pinned publication security gate, and review the
 branch-protection plan before considering visibility changes.
 
 LegacyGuard is temporary project branding; no final commercial name has been

@@ -29,9 +29,12 @@ ownership or grant a license to incorporate submitted material. Before
 accepting outside copyrightable work, the owner must establish and publish the
 contribution and licensing terms. No DCO or CLA has been selected.
 
-The repository's AGPL-3.0 license is present, but the owner must still resolve
-provenance and authority to publish the existing project materials. This
-policy does not make a legal ownership determination.
+The repository is licensed under AGPL-3.0, which the owner has chosen to retain.
+James Herrera is the current individual copyright holder. Based on the
+repository provenance review and owner attestation, authority to publish the
+existing project materials has been reviewed, including acknowledged
+AI-assisted development. This policy does not make a legal ownership
+determination or constitute legal clearance.
 
 ## Reserved decisions
 
