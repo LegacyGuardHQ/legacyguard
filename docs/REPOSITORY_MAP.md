@@ -5,11 +5,11 @@
 - Canonical repository: `LegacyGuardHQ/legacyguard`
 - Default branch: `master`
 - Project stage: pre-production alpha; development and testing use synthetic data only
-- Repository visibility: private; publication requires a separate owner decision
+- Repository visibility: public source repository; the product is not publicly launched
 - Product name: LegacyGuard is temporary project branding; no final commercial name has been selected
 
 The application is not approved for real personal, financial, estate, document,
-or other sensitive data. Publishing source code would not mean a hosted
+or other sensitive data. Publishing source code does not mean a hosted
 application is production-ready. The informational website is maintained
 separately and is not connected to application accounts or document storage.
 

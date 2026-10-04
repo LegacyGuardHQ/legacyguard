@@ -8,10 +8,9 @@ has been selected.
 
 LegacyGuard is software, not legal, financial, tax, medical, or estate-planning advice. Consult qualified professionals for decisions in those areas.
 
-The canonical source repository is `LegacyGuardHQ/legacyguard`. It remains
-private while publication prerequisites and owner decisions are resolved.
-Source publication, if approved, will not mean a hosted application is
-production-ready. The separate informational website is not the application
+The canonical source repository is `LegacyGuardHQ/legacyguard`. It is
+public as a source repository. Source publication does not mean a hosted
+application is production-ready. The separate informational website is not the application
 and has no account or document-storage integration.
 
 ## Implemented in the alpha

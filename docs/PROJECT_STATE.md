@@ -3,8 +3,9 @@
 ## Repository status
 
 The canonical repository is `LegacyGuardHQ/legacyguard`, with `master` as the
-default branch. The repository remains private while public-launch blockers and
-owner decisions are resolved.
+default branch. The source repository is public; the product itself is not
+publicly launched or production-ready, and public-launch blockers and owner
+decisions remain separate work.
 
 ## Current product capabilities
 
@@ -24,16 +25,14 @@ Manual conversion requires a confirmed finding and produces an asset that remain
 
 ## Public source repository readiness
 
-The repository remains private and is not approved for publication. History
-remediation is complete for the inspected current refs, but a publication
-review and owner decisions remain required. The owner-controlled, monitored
-mailbox documented in `SECURITY.md` is the verified private security-reporting
-route. GitHub Private Vulnerability Reporting is not confirmed enabled. The
-owner has attested project provenance and publication authority and retained
-AGPL-3.0 (James Herrera is the current individual copyright holder; this is not
-formal legal clearance). The owner must still approve contribution intake
-terms, complete the pinned publication security gate, and review the
-branch-protection plan before considering visibility changes.
+The source repository is public; the product itself is not publicly launched or
+production-ready. GitHub Private Vulnerability Reporting is enabled and is the
+preferred private security-reporting route; the owner-controlled, monitored
+mailbox documented in `SECURITY.md` remains a verified fallback. The owner has
+attested project provenance and publication authority and retained AGPL-3.0
+(James Herrera is the current individual copyright holder; this is not formal
+legal clearance). Terms for future outside code contributions are not yet
+established.
 
 LegacyGuard is temporary project branding; no final commercial name has been
 selected. The separate informational website is not the application and does
