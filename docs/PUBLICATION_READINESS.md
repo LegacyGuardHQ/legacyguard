@@ -34,10 +34,19 @@ specific written request or authorization from the project owner. Opening an
 issue or discussion does not transfer ownership or grant rights to incorporate
 submitted material. No DCO or CLA has been selected.
 
-The repository contains an AGPL-3.0 license. Before publication, the owner must
-confirm authority and provenance for existing project code, assets, and other
-copyrightable materials, and decide whether to keep this license. This document
-does not determine ownership or make a legal claim.
+The repository contains an AGPL-3.0 license, which the owner has chosen to
+retain. James Herrera is the current individual copyright holder. Based on the
+repository provenance review and owner attestation, the owner has confirmed
+authority to publish the existing project code, assets, and other copyrightable
+materials; no conflicting third-party rights were identified by the review.
+AI-assisted development (including GitHub Copilot and Devin co-authored
+commits) is acknowledged and authorized for publication by the owner; it is not
+an unresolved publication-authority blocker based on the completed review and
+attestation. This document does not claim formal legal clearance, trademark
+clearance, copyright registration, or independent verification of every
+historical line, and AI tools do not own or hold copyright. LegacyGuard remains
+temporary branding. Future outside contributions remain governed by the policy
+above.
 
 ## Recommended `master` protection
 
@@ -87,7 +96,8 @@ is public.
 
 1. Keep the verified security mailbox monitored; optionally enable and test
    Private Vulnerability Reporting.
-2. Resolve legal/provenance authority and the existing license decision.
+2. Provenance, publication authority, and the AGPL-3.0 decision are
+   owner-attested (complete); no further action is required for this item.
 3. Approve the contribution-intake policy above or publish replacement terms.
 4. Review the pinned security gate and publication scan results.
 5. Apply and verify the approved `master` protection settings.

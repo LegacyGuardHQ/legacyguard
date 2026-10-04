@@ -11,8 +11,10 @@ do not override that mission.
 
 ## Current model
 
-LegacyGuard is founder-led while it establishes its license, safety gates,
-contributor community, and operating model. Material decisions must record the
+LegacyGuard is founder-led while it establishes terms for future outside
+contributions, safety gates, its contributor community, and its operating
+model. The repository license, AGPL-3.0, is already established. Material
+decisions must record the
 problem, evidence, affected people, risks, alternatives, decision owner, review
 conditions, and date.
 
@@ -29,9 +31,12 @@ ownership or grant a license to incorporate submitted material. Before
 accepting outside copyrightable work, the owner must establish and publish the
 contribution and licensing terms. No DCO or CLA has been selected.
 
-The repository's AGPL-3.0 license is present, but the owner must still resolve
-provenance and authority to publish the existing project materials. This
-policy does not make a legal ownership determination.
+The repository is licensed under AGPL-3.0, which the owner has chosen to retain.
+James Herrera is the current individual copyright holder. Based on the
+repository provenance review and owner attestation, authority to publish the
+existing project materials has been reviewed, including acknowledged
+AI-assisted development. This policy does not make a legal ownership
+determination or constitute legal clearance.
 
 ## Reserved decisions
 

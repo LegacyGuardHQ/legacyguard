@@ -123,10 +123,16 @@ PostgreSQL migration and test coverage also runs in Backend CI. See [the deploym
 
 ## Contributing and project information
 
-The repository contains the [GNU Affero General Public License v3.0](LICENSE).
-Publication authority and provenance remain subject to owner review. Feedback
-may be submitted through the issue forms, but unsolicited code contributions
-and pull requests are not accepted; see the contributing guide.
+Copyright © 2026 James Herrera
+
+Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0); see
+[LICENSE](LICENSE). Based on the repository provenance review and owner
+attestation by James Herrera, publication authority and provenance for the
+existing project materials have been reviewed, and the owner has chosen to
+retain AGPL-3.0. This is not formal legal clearance. LegacyGuard remains
+temporary project branding. Feedback may be submitted through the issue forms,
+but unsolicited code contributions and pull requests are not accepted; see the
+contributing guide.
 
 - [Contributing guidance](CONTRIBUTING.md)
 - [Project state](docs/PROJECT_STATE.md)

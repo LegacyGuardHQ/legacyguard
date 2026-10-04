@@ -29,8 +29,11 @@ the source-publication owner actions and branch-protection recommendations.
 
 ## Next stages
 
-1. **Public source readiness:** resolve provenance and publication authority,
-   verify private vulnerability intake, complete the pinned publication scan,
+1. **Public source readiness:** provenance and publication authority have been
+   reviewed and owner-attested (AGPL-3.0 retained); the operational private
+   security-reporting mailbox has been verified (Private Vulnerability
+   Reporting is optional and not currently confirmed enabled). Remaining work:
+   complete the pinned publication scan,
    review branch protection, and correct/review the separate informational
    website. Repository visibility changes require explicit owner approval.
 2. **Safe demonstration:** offer only informational or synthetic-data
