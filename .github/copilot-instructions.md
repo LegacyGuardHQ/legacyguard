@@ -2,6 +2,8 @@
 
 ## Purpose and authority
 
+LegacyGuard is temporary project branding; no final commercial product name has been selected. Do not perform broad rebranding without an owner decision.
+
 LegacyGuard is a privacy-first financial asset discovery and continuity-planning platform. It helps an authenticated owner locate, review, and organize retirement accounts, insurance policies, benefits, estate records, and other assets without treating automated signals as proof.
 
 Use these instructions for repository work. Before changing code, also read the files relevant to the task, especially `docs/PROJECT_STATE.md`, the applicable architecture or security document, current tests, and existing API schemas. Project-state and roadmap documents are snapshots: confirm them against the current branch, working tree, code, and recent history before relying on milestone details.

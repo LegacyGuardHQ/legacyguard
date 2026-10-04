@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve LegacyGuard. Never include real personal, financial, medical, estate, document, or credential information.
+        Use synthetic data only. Do not post vulnerability details, credentials, personal information, financial or estate information, uploaded documents, or other sensitive material in this public issue. Report security vulnerabilities only through a verified private route in SECURITY.md.
   - type: checkboxes
     attributes:
       label: Safety check

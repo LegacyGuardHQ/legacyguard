@@ -2,25 +2,23 @@
 
 ## Status
 
-LegacyGuard is alpha software for synthetic-data development and testing. The
-implemented controls below are security architecture, not a claim that the
-application is production-safe, independently audited, compliant, or free of
-risk.
+LegacyGuard is a temporary project name for pre-production software. Use
+synthetic data only. Implemented controls are not a claim that the application
+is production-safe, independently audited, compliant, or free of risk.
 
 ## Reporting a vulnerability
 
-Do not disclose a suspected vulnerability, exploit, sensitive log, secret, or
-personal information in a public issue, discussion, pull request, website
-form, or social-media post.
+Do not post vulnerability details, credentials, personal or financial
+information, estate information, uploaded documents, sensitive logs, or other
+confidential material in public issues, discussions, pull requests, or website
+forms.
 
-Send private reports to **legacyguard.project@gmail.com**, the project's
-dedicated security and operations mailbox (not a personal address). This
-mailbox is the fallback route whenever GitHub private reporting is unavailable.
-
-Immediately after the repository becomes public, the owner will enable and
-test **Report a vulnerability** on the repository's **Security** tab. If that
-interface is unavailable, reporters must use the verified fallback documented
-in the root [security policy](../SECURITY.md), not a public issue.
+GitHub Private Vulnerability Reporting is preferred once the owner enables and
+tests it; it is not currently confirmed enabled. The root [security policy](../SECURITY.md)
+documents an existing fallback mailbox, but the owner must verify ownership,
+private access, delivery, and monitoring before representing it as an
+operational intake route. Resolve that verification before public source
+publication.
 
 Include the affected version or commit, a concise impact statement,
 prerequisites, safe reproduction steps using synthetic data, sanitized logs or
@@ -101,3 +99,4 @@ allowlist, not a separate header allowlist, is the controlling browser boundary.
 - no proven coordinated production backup/restore or retention process
 - in-process Discovery work is not a durable isolated worker system
 - no public production service is approved for real sensitive data
+- no final commercial product name has been selected

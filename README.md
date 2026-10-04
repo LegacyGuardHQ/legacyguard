@@ -1,13 +1,18 @@
 # LegacyGuard
 
-LegacyGuard is a privacy-first personal asset continuity and legacy-planning application. It helps people organize assets, beneficiaries, important documents, and discovery results so that information can be reviewed and maintained in one workspace.
+LegacyGuard is a temporary project name for a privacy-first personal asset
+continuity and legacy-planning application. No final commercial product name
+has been selected.
 
 > **Alpha status:** Development is active, but LegacyGuard is not production-ready or approved for real personal, financial, medical, estate, credential, or other sensitive data. Use synthetic data only. No public production application is currently available.
 
 LegacyGuard is software, not legal, financial, tax, medical, or estate-planning advice. Consult qualified professionals for decisions in those areas.
 
-The canonical source repository is `LegacyGuard/legacyguard`. It remains private
-while public-launch blockers and owner decisions are resolved.
+The canonical source repository is `LegacyGuardHQ/legacyguard`. It remains
+private while publication prerequisites and owner decisions are resolved.
+Source publication, if approved, will not mean a hosted application is
+production-ready. The separate informational website is not the application
+and has no account or document-storage integration.
 
 ## Implemented in the alpha
 
@@ -118,7 +123,10 @@ PostgreSQL migration and test coverage also runs in Backend CI. See [the deploym
 
 ## Contributing and project information
 
-LegacyGuard is licensed under the [GNU Affero General Public License v3.0](LICENSE). Focused proposals are welcome, but outside code contributions are not yet accepted because contribution ownership terms remain an owner decision. See the contributing guide before beginning work.
+The repository contains the [GNU Affero General Public License v3.0](LICENSE).
+Publication authority and provenance remain subject to owner review. Feedback
+may be submitted through the issue forms, but unsolicited code contributions
+and pull requests are not accepted; see the contributing guide.
 
 - [Contributing guidance](CONTRIBUTING.md)
 - [Project state](docs/PROJECT_STATE.md)

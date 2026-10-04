@@ -16,6 +16,23 @@ contributor community, and operating model. Material decisions must record the
 problem, evidence, affected people, risks, alternatives, decision owner, review
 conditions, and date.
 
+## Feedback and contribution intake
+
+Issues and Discussions may be used for ordinary, non-sensitive feedback.
+Vulnerability reports must use a verified private route; public issues are not
+an intake channel for security details or sensitive evidence.
+
+Unsolicited code contributions and pull requests are not accepted. A pull
+request may be submitted only when the project owner has specifically requested
+or authorized it in writing. Opening an issue or discussion does not transfer
+ownership or grant a license to incorporate submitted material. Before
+accepting outside copyrightable work, the owner must establish and publish the
+contribution and licensing terms. No DCO or CLA has been selected.
+
+The repository's AGPL-3.0 license is present, but the owner must still resolve
+provenance and authority to publish the existing project materials. This
+policy does not make a legal ownership determination.
+
 ## Reserved decisions
 
 During this phase, the founder must explicitly approve:

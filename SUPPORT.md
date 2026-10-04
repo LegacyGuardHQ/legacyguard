@@ -1,42 +1,37 @@
-# Supporting LegacyGuard
+# Support and Feedback
 
-LegacyGuard is a privacy-first project intended to help families
-organize information they may one day need. The immediate goal is to fund
-independent security review, privacy and legal guidance, reliable hosting,
-accessibility work, and a carefully controlled pilot.
+LegacyGuard is a temporary project name for pre-production software. The
+application is not approved for real personal or sensitive data; use synthetic
+data only. Source publication, if approved later, will not mean a hosted
+application is production-ready.
 
-## Help available now
+## Security vulnerabilities
 
-- Contribute code, tests, documentation, design, or accessibility expertise.
-- Review the security and privacy architecture.
-- Introduce mission-aligned nonprofit, legal, estate-planning, caregiving, or
-  community partners.
-- Share the public project site with appropriate contributors and advisors.
+Use only a verified private reporting route described in
+[SECURITY.md](SECURITY.md). Do not post vulnerability details, credentials,
+personal information, financial or estate information, uploaded documents,
+sensitive logs, or other confidential material in public issues or
+Discussions. The documented fallback contact requires owner verification
+before it can be represented as operational.
 
-## Financial support
+## Bugs
 
-LegacyGuard is preparing a transparent funding channel. No payment link is
-listed until the maintainer completes identity, banking, tax, and platform
-verification. When enabled, the repository and public site will link only to
-the verified official account.
+Use the GitHub bug-report form for reproducible software problems. Include only
+synthetic data and sanitized logs or screenshots. Do not use a bug report to
+disclose a suspected vulnerability.
 
-Initial funding priorities are:
+## Support and product questions
 
-1. Independent security and privacy review.
-2. Secure pilot hosting and operational monitoring.
-3. Legal, compliance, and data-handling guidance.
-4. Accessibility and user-experience validation.
-5. Contributor support and sustainable maintenance.
+Use repository Discussions for non-security questions and feedback when
+available. Do not submit private account details or expect access to a
+production service; no public production application is available. There is no
+guaranteed response time.
 
-Financial support does not buy access to user data, weaken security review, or
-guarantee product influence. Funding terms, spending goals, and material
-conflicts should be documented publicly before funds are accepted.
+## Contributions and funding
 
-LegacyGuard is licensed under the GNU Affero General Public License v3.0
-(AGPL-3.0) — see [LICENSE](LICENSE).
-
-## Safety
-
-Do not send personal records, passwords, account numbers, legal documents,
-medical information, or payment details through GitHub issues or repository
-discussions. The public project is not a production personal-information vault.
+Feedback and issue reports do not authorize code contributions or transfer
+ownership. Pull requests are not accepted unless the project owner has
+specifically requested or authorized them. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The existing license is in [LICENSE](LICENSE); publication authority and
+provenance remain subject to owner review. No verified public funding channel
+is represented by this support policy.

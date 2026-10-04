@@ -2,7 +2,7 @@
 
 ## Repository status
 
-The canonical repository is `LegacyGuard/legacyguard`, with `master` as the
+The canonical repository is `LegacyGuardHQ/legacyguard`, with `master` as the
 default branch. The repository remains private while public-launch blockers and
 owner decisions are resolved.
 
@@ -24,10 +24,20 @@ Manual conversion requires a confirmed finding and produces an asset that remain
 
 ## Public source repository readiness
 
-The source repository is being prepared for public visibility, but it is not
-yet approved for publication. History privacy, a verified private security
-contact, legal/provenance decisions, external website corrections, and final
-repository-setting verification remain launch gates.
+The repository remains private and is not approved for publication. History
+remediation is complete for the inspected current refs, but a publication
+review and owner decisions remain required. The existing fallback security
+contact is documented in `SECURITY.md`; the owner must verify mailbox
+ownership, private access, delivery, and monitoring before it is relied on.
+GitHub Private Vulnerability Reporting is not confirmed enabled. The owner must
+resolve project provenance and publication authority, approve contribution
+intake terms, complete the pinned publication security gate, and review the
+branch-protection plan before considering visibility changes.
+
+LegacyGuard is temporary project branding; no final commercial name has been
+selected. The separate informational website is not the application and does
+not provide accounts or document storage. Publishing source code would not
+approve the hosted application for production or real data.
 
 ## Production application readiness
 
