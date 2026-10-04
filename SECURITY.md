@@ -23,12 +23,14 @@ or other confidential material in a public issue, discussion, pull request,
 website form, or social-media post.** Do not ask for a private reporting
 address in a public issue.
 
-GitHub Private Vulnerability Reporting is the preferred route once the owner
-enables and tests it. It is not currently confirmed enabled. When **Report a
-vulnerability** is visible on the repository's **Security** tab, use that
-private advisory flow.
+GitHub Private Vulnerability Reporting is enabled for this repository and is
+the preferred method for privately reporting security vulnerabilities. Use
+**Report a vulnerability** on the repository's **Security** tab to open a
+private advisory. Do not disclose vulnerability details through public GitHub
+Issues, Discussions, pull requests, or any other public channel.
 
-The currently operational private reporting route is email to
+The verified private security mailbox remains an alternate, fallback private
+reporting route: email
 **legacyguard.project@gmail.com**. The owner controls this mailbox, it receives
 external email, and it is monitored for security reports.
 

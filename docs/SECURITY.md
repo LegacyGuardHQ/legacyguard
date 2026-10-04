@@ -13,10 +13,10 @@ information, estate information, uploaded documents, sensitive logs, or other
 confidential material in public issues, discussions, pull requests, or website
 forms.
 
-GitHub Private Vulnerability Reporting is preferred once the owner enables and
-tests it; it is not currently confirmed enabled. The currently operational
-private reporting route is the owner-controlled, monitored mailbox documented in
-the root [security policy](../SECURITY.md).
+GitHub Private Vulnerability Reporting is enabled for this repository and is the
+preferred private reporting method. The owner-controlled, monitored mailbox
+documented in the root [security policy](../SECURITY.md) remains an alternate,
+fallback private route.
 
 Include the affected version or commit, a concise impact statement,
 prerequisites, safe reproduction steps using synthetic data, sanitized logs or

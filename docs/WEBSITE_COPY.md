@@ -110,10 +110,9 @@ Replace “Stable open-source release” and “production-readiness validation�
 
 ```text
 Do not report a vulnerability in a public issue or website form. Follow the
-repository security policy. Do not claim that GitHub private vulnerability
-reporting or the fallback is operational until the owner has enabled/tested or
-verified the route. Never send real user data, credentials, or private
-documents as evidence.
+repository security policy, which prefers GitHub private vulnerability
+reporting and lists a private fallback mailbox. Never send real user data,
+credentials, or private documents as evidence.
 ```
 
 ## Funding

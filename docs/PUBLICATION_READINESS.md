@@ -13,11 +13,8 @@ account or document-storage integration.
   financial or estate information, uploaded documents, sensitive logs, or other
   confidential material in public issues, discussions, pull requests, or
   website forms.
-- GitHub Private Vulnerability Reporting is preferred if the owner can enable
-  and test it. The repository API returned 404 during the 2026-10-04 review;
-  availability under the current plan is **unknown**, not confirmed available
-  or unavailable. The owner must verify the feature in repository settings and
-  test the route before relying on it.
+- GitHub Private Vulnerability Reporting is enabled (verified after the
+  repository became public) and is the preferred private route.
 - The owner has verified control, external delivery, and monitoring of the
   mailbox recorded in `SECURITY.md` and the issue chooser; it is the currently
   operational private reporting route. Do not invent or substitute a contact
@@ -94,8 +91,8 @@ is public.
 
 ## Owner decisions before publication
 
-1. Keep the verified security mailbox monitored; optionally enable and test
-   Private Vulnerability Reporting.
+1. Keep the verified security mailbox monitored as a fallback route; Private
+   Vulnerability Reporting is enabled.
 2. Provenance, publication authority, and the AGPL-3.0 decision are
    owner-attested (complete); no further action is required for this item.
 3. Approve the contribution-intake policy above or publish replacement terms.

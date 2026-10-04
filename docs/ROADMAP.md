@@ -30,12 +30,11 @@ the source-publication owner actions and branch-protection recommendations.
 ## Next stages
 
 1. **Public source readiness:** provenance and publication authority have been
-   reviewed and owner-attested (AGPL-3.0 retained); the operational private
-   security-reporting mailbox has been verified (Private Vulnerability
-   Reporting is optional and not currently confirmed enabled). Remaining work:
-   complete the pinned publication scan,
-   review branch protection, and correct/review the separate informational
-   website. Repository visibility changes require explicit owner approval.
+   reviewed and owner-attested (AGPL-3.0 retained); the source repository is
+   now public, GitHub Private Vulnerability Reporting is enabled, and the
+   verified private mailbox remains a fallback route. The product itself is not
+   publicly launched or production-ready. Remaining work: review the separate
+   informational website.
 2. **Safe demonstration:** offer only informational or synthetic-data
    demonstrations. Do not collect real accounts, documents, or personal data.
 3. **Controlled private beta:** only after private hosting, verified
