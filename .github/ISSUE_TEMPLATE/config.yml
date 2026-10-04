@@ -2,7 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
     url: https://github.com/LegacyGuardHQ/legacyguard/security/policy
-    about: Never post vulnerability details publicly. Follow the policy; the owner must verify private intake before publication.
+    about: Never post vulnerability details publicly. Follow the private reporting instructions in the policy.
   - name: Private security report
     url: mailto:legacyguard.project@gmail.com
-    about: Existing fallback contact; owner verification of private access and monitoring is required before relying on it.
+    about: Owner-controlled, monitored mailbox for private security reports. Never post vulnerability details publicly.

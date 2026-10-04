@@ -7,12 +7,11 @@ application is production-ready.
 
 ## Security vulnerabilities
 
-Use only a verified private reporting route described in
+Use only the private reporting route described in
 [SECURITY.md](SECURITY.md). Do not post vulnerability details, credentials,
 personal information, financial or estate information, uploaded documents,
 sensitive logs, or other confidential material in public issues or
-Discussions. The documented fallback contact requires owner verification
-before it can be represented as operational.
+Discussions.
 
 ## Bugs
 

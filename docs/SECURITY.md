@@ -14,11 +14,9 @@ confidential material in public issues, discussions, pull requests, or website
 forms.
 
 GitHub Private Vulnerability Reporting is preferred once the owner enables and
-tests it; it is not currently confirmed enabled. The root [security policy](../SECURITY.md)
-documents an existing fallback mailbox, but the owner must verify ownership,
-private access, delivery, and monitoring before representing it as an
-operational intake route. Resolve that verification before public source
-publication.
+tests it; it is not currently confirmed enabled. The currently operational
+private reporting route is the owner-controlled, monitored mailbox documented in
+the root [security policy](../SECURITY.md).
 
 Include the affected version or commit, a concise impact statement,
 prerequisites, safe reproduction steps using synthetic data, sanitized logs or
