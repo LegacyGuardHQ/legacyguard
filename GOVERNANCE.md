@@ -11,8 +11,10 @@ do not override that mission.
 
 ## Current model
 
-LegacyGuard is founder-led while it establishes its license, safety gates,
-contributor community, and operating model. Material decisions must record the
+LegacyGuard is founder-led while it establishes terms for future outside
+contributions, safety gates, its contributor community, and its operating
+model. The repository license, AGPL-3.0, is already established. Material
+decisions must record the
 problem, evidence, affected people, risks, alternatives, decision owner, review
 conditions, and date.
 
