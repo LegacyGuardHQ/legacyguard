@@ -26,12 +26,11 @@ Manual conversion requires a confirmed finding and produces an asset that remain
 
 The repository remains private and is not approved for publication. History
 remediation is complete for the inspected current refs, but a publication
-review and owner decisions remain required. The existing fallback security
-contact is documented in `SECURITY.md`; the owner must verify mailbox
-ownership, private access, delivery, and monitoring before it is relied on.
-GitHub Private Vulnerability Reporting is not confirmed enabled. The owner must
-resolve project provenance and publication authority, approve contribution
-intake terms, complete the pinned publication security gate, and review the
+review and owner decisions remain required. The owner-controlled, monitored
+mailbox documented in `SECURITY.md` is the verified private security-reporting
+route. GitHub Private Vulnerability Reporting is not confirmed enabled. The
+owner must resolve project provenance and publication authority, approve
+contribution intake terms, complete the pinned publication security gate, and review the
 branch-protection plan before considering visibility changes.
 
 LegacyGuard is temporary project branding; no final commercial name has been

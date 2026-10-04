@@ -18,11 +18,10 @@ account or document-storage integration.
   availability under the current plan is **unknown**, not confirmed available
   or unavailable. The owner must verify the feature in repository settings and
   test the route before relying on it.
-- The existing fallback contact is recorded in `SECURITY.md` and the issue
-  chooser. Repository text alone does not verify mailbox ownership, private
-  access, delivery, or monitoring. The owner must verify those operational
-  properties before public source publication. Do not invent or substitute a
-  contact address.
+- The owner has verified control, external delivery, and monitoring of the
+  mailbox recorded in `SECURITY.md` and the issue chooser; it is the currently
+  operational private reporting route. Do not invent or substitute a contact
+  address.
 - Ordinary bugs belong in the bug form with synthetic data and sanitized logs.
   Non-security questions may use Discussions. Neither public route is for
   confidential information.
@@ -86,7 +85,8 @@ is public.
 
 ## Owner decisions before publication
 
-1. Verify and test one private vulnerability intake route.
+1. Keep the verified security mailbox monitored; optionally enable and test
+   Private Vulnerability Reporting.
 2. Resolve legal/provenance authority and the existing license decision.
 3. Approve the contribution-intake policy above or publish replacement terms.
 4. Review the pinned security gate and publication scan results.
