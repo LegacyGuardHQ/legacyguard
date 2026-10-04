@@ -28,12 +28,9 @@ enables and tests it. It is not currently confirmed enabled. When **Report a
 vulnerability** is visible on the repository's **Security** tab, use that
 private advisory flow.
 
-The repository currently documents this fallback security contact:
-**legacyguard.project@gmail.com**. The owner must verify mailbox ownership,
-private access, delivery, and monitoring before the address is relied on for
-public vulnerability intake. Until that verification is complete, do not
-represent the fallback as a verified operational channel. Resolve this before
-public source publication.
+The currently operational private reporting route is email to
+**legacyguard.project@gmail.com**. The owner controls this mailbox, it receives
+external email, and it is monitored for security reports.
 
 Include, when safely available:
 
