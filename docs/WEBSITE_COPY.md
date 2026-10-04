@@ -1,23 +1,27 @@
 # Public Website Copy and Activation Gate
 
-The existing website is hosted outside this repository. This file is the
-reviewable source for its next public update; changing this file does not deploy
-the website.
+The informational website is hosted separately from this repository and the
+application. It has no application account or document-storage integration.
+This file is review guidance only; changing it does not deploy or modify that
+website. LegacyGuard is temporary project branding; no final commercial name
+has been selected.
 
 Do not deploy the copy below until:
 
-- `LegacyGuard/legacyguard` is public and anonymously reachable
-- the repository history/privacy and legal owner decisions are complete
-- the root security policy contains a tested private fallback route
-- GitHub private vulnerability reporting is enabled and tested
+- the owner has explicitly approved repository publication and verified that
+   `LegacyGuardHQ/legacyguard` is public and anonymously reachable
+- repository history/privacy and legal/provenance owner decisions are complete
+- the root security policy's fallback route has been verified operationally
+- GitHub private vulnerability reporting is enabled and tested, if available
 
 ## Required link replacements
 
-Replace every repository, issue, and release URL under
-`github.com/jh505tt-create/legacyguard` with its canonical equivalent under:
+Use the current canonical repository owner, `LegacyGuardHQ`, for repository,
+issue, release, and security-policy links. Do not publish links to an obsolete
+owner or claim that source or releases are public before anonymous verification:
 
 ```text
-https://github.com/LegacyGuard/legacyguard
+https://github.com/LegacyGuardHQ/legacyguard
 ```
 
 Use the repository root for the primary source link, `/issues` for public
@@ -64,8 +68,8 @@ Read the alpha roadmap
 Replace release and test-count claims with:
 
 ```text
-Current prerelease: v1.1.0-rc.1 · Alpha · Automated backend, frontend,
-PostgreSQL, and CodeQL checks run in GitHub Actions
+Current prerelease and CI claims must be checked against the exact public
+release and commit. Do not state that CodeQL runs while `CODEQL_ENABLED=false`.
 ```
 
 Do not publish a hard-coded test count unless it is generated from the exact
@@ -75,8 +79,9 @@ linked commit and updated automatically.
 
 ```text
 The source, tests, release history, security design, and operating limitations
-are public for review. Passing checks and implemented encryption are evidence of
-development quality, not a claim of production readiness or zero risk.
+may be described as public only after anonymous verification. Source publication
+and passing checks do not mean a hosted product is production-ready or approved
+for real data.
 ```
 
 ## Roadmap
@@ -105,9 +110,10 @@ Replace “Stable open-source release” and “production-readiness validation�
 
 ```text
 Do not report a vulnerability in a public issue or website form. Follow the
-repository security policy and use GitHub private vulnerability reporting. If
-that interface is unavailable, use the verified fallback listed in the policy.
-Never send real user data, credentials, or private documents as evidence.
+repository security policy. Do not claim that GitHub private vulnerability
+reporting or the fallback is operational until the owner has enabled/tested or
+verified the route. Never send real user data, credentials, or private
+documents as evidence.
 ```
 
 ## Funding

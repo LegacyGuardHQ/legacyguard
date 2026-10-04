@@ -17,19 +17,23 @@ as production releases.
 
 ## Reporting a Vulnerability
 
-Do not report a suspected vulnerability through a public GitHub issue,
-discussion, pull request, website form, or social-media post. Do not include
-vulnerability details in a public request for contact.
+**Do not post vulnerability details, exploit steps, credentials, personal or
+financial information, estate information, uploaded documents, sensitive logs,
+or other confidential material in a public issue, discussion, pull request,
+website form, or social-media post.** Do not ask for a private reporting
+address in a public issue.
 
-Send private reports to **legacyguard.project@gmail.com**, the project's
-dedicated security and operations mailbox (not a personal address). This email
-is the fallback route whenever GitHub private reporting is unavailable.
+GitHub Private Vulnerability Reporting is the preferred route once the owner
+enables and tests it. It is not currently confirmed enabled. When **Report a
+vulnerability** is visible on the repository's **Security** tab, use that
+private advisory flow.
 
-Immediately after the repository becomes public, the owner will enable and
-test GitHub private vulnerability reporting. When enabled, use **Report a
-vulnerability** on the repository's **Security** tab. If that interface is
-unavailable, use the verified fallback route documented in this policy; do not
-open a public issue.
+The repository currently documents this fallback security contact:
+**legacyguard.project@gmail.com**. The owner must verify mailbox ownership,
+private access, delivery, and monitoring before the address is relied on for
+public vulnerability intake. Until that verification is complete, do not
+represent the fallback as a verified operational channel. Resolve this before
+public source publication.
 
 Include, when safely available:
 
@@ -59,6 +63,13 @@ Security reports must not contain real:
 - credentials belonging to another person
 
 Use synthetic or appropriately redacted test data whenever possible.
+
+## Bugs and Support
+
+Use the public bug-report issue form only for ordinary, reproducible problems
+with synthetic data and sanitized evidence. Use repository Discussions for
+non-security questions when available. Do not use either channel for private
+support or sensitive information; see [SUPPORT.md](SUPPORT.md).
 
 ## Responsible Disclosure
 

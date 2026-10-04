@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not disclose an exploitable vulnerability here. Email private reports to legacyguard.project@gmail.com and follow docs/SECURITY.md. This form is for review proposals, defense-in-depth work, and already-public security topics.
+        This public form is only for non-sensitive defensive review proposals. Do not disclose vulnerability details, credentials, personal, financial, or estate information, uploaded documents, or other sensitive evidence here. Report vulnerabilities only through a verified private route in SECURITY.md; the owner must verify the documented fallback before it is relied on.
   - type: checkboxes
     attributes:
       label: Disclosure check

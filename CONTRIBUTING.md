@@ -16,62 +16,42 @@ contribution intake is open.
 
 - Never include real personal, financial, medical, estate, document, or
   credential data in issues, screenshots, logs, fixtures, or pull requests.
-- Use synthetic test data only.
-- Do not report exploitable security vulnerabilities in a public issue. Follow
-  the private reporting guidance in [docs/SECURITY.md](docs/SECURITY.md).
-- Keep each change focused and explain any privacy or authorization impact.
+# Contributing to LegacyGuard
 
-## Ways to contribute
+LegacyGuard is a temporary project name for pre-production software. Use
+synthetic data only. Issues and Discussions may be used for feedback, but
+**unsolicited code contributions and pull requests are not accepted**.
 
-- Fix a documented bug or improve test coverage.
-- Propose an accessibility, usability, or documentation improvement.
-- Review authentication, authorization, encryption, audit, or data-minimization
-  behavior.
-- Improve deployment safety and operational documentation.
-- Suggest a partnership, pilot, or funding opportunity that respects the
-  project's privacy-first mission.
+## Feedback and security reports
 
-## Contribution workflow
+Use the issue forms for ordinary bugs or proposals. Do not include real
+personal, financial, medical, estate, document, credential, or other sensitive
+information. Report suspected vulnerabilities only through a verified private
+route described in [SECURITY.md](SECURITY.md), never in a public issue,
+discussion, or pull request.
 
-1. Search existing issues and pull requests before opening a new one.
-2. Use the closest guided issue form and keep sensitive details out of it.
-3. Agree on scope before beginning a large change.
-4. Create a focused branch and include tests or documentation where relevant.
-5. Complete the pull-request template, including privacy and validation notes.
-6. Wait for review; a contribution is not accepted until it is merged.
+Opening an issue or participating in a discussion does not transfer copyright,
+grant a license, or authorize the project to incorporate submitted code or
+other copyrightable material.
 
-## Development checks
+## Pull requests and contribution terms
 
-Backend:
+Submit a pull request only when the project owner has specifically requested
+or authorized it in writing. Before accepting outside copyrightable work, the
+owner must publish contribution and licensing terms and confirm the applicable
+intake process. No DCO or CLA has been selected. Do not begin implementation
+work on the assumption that a proposed contribution will be accepted.
 
-```powershell
-Set-Location backend
-python -m pytest
-```
+The repository contains an AGPL-3.0 `LICENSE`. Its presence does not settle
+the provenance or publication authority of every existing contribution, nor
+does it establish terms for future outside contributions. The owner must
+resolve those questions before accepting external code.
 
-Frontend:
+## Development guidance for authorized work
 
-```powershell
-Set-Location frontend
-npm test -- --run
+For work explicitly authorized by the owner, use synthetic data, preserve
+owner-scoped access and privacy safeguards, include proportionate tests, and
+document security or data-lifecycle impacts. The repository's existing checks
+are listed in [README.md](README.md). An authorized pull request must complete
+the repository pull-request template and required review before any merge.
 npm run build
-```
-
-Also run `git diff --check` before submitting. More focused checks are welcome
-for documentation-only changes, but state exactly what you validated.
-
-## Contribution standards
-
-- Preserve owner scoping and least-privilege access.
-- Keep findings and imported information subject to human review.
-- Do not weaken encryption, authentication, authorization, auditing, or safe
-  error handling for convenience.
-- Avoid new dependencies unless their need, maintenance, license, and security
-  impact are explained.
-- Write plain-language documentation for behavior users must understand.
-
-The owner must decide whether contribution intake will use a DCO, CLA, or
-another documented approach before accepting outside copyrightable work. Once
-intake opens, accepted contributions will be governed by the repository's
-AGPL-3.0 license and the published contribution terms. Public visibility alone
-does not grant reuse rights beyond the license.
