@@ -9,7 +9,7 @@ production readiness are separate decisions.
 
 - Product maturity: internal alpha
 - Canonical repository: `LegacyGuardHQ/legacyguard`, default branch `master`
-- Repository visibility: private pending owner review and publication gates
+- Repository visibility: public source repository; the product is not publicly launched
 - Safe use: local development and testing with synthetic data
 - Public production service: none is available or approved
 

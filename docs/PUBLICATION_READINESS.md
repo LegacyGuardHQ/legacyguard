@@ -1,8 +1,8 @@
 # Public Source Publication Readiness
 
-This document records preparation guidance only. The repository remains
-private. LegacyGuard is a temporary project name; no final commercial name has
-been selected. Source publication would not approve a hosted application for
+This document records publication guidance and history. The source repository
+is now public. LegacyGuard is a temporary project name; no final commercial name has
+been selected. Source publication does not approve a hosted application for
 production or real sensitive data. Development and testing use synthetic data
 only. The separate informational website is not the application and has no
 account or document-storage integration.
@@ -76,7 +76,7 @@ a GitHub username.
 
 ## Publication audit record
 
-At the Stage 1 baseline review, the canonical repository was private and clean.
+At the Stage 1 baseline review (before publication), the canonical repository was private and clean.
 The known history remediation was complete; inspected current refs did not
 reach the known sensitive documentation commits or contain their exact path
 tokens. Tracked-file checks found no absolute personal filesystem paths,
@@ -89,7 +89,7 @@ content must be reviewed separately; it currently has stale repository links
 and must not be treated as evidence that the application or source repository
 is public.
 
-## Owner decisions before publication
+## Owner decisions (completed through publication)
 
 1. Keep the verified security mailbox monitored as a fallback route; Private
    Vulnerability Reporting is enabled.
@@ -99,4 +99,4 @@ is public.
 4. Review the pinned security gate and publication scan results.
 5. Apply and verify the approved `master` protection settings.
 6. Independently review and correct the separate informational website.
-7. Make a separate, deliberate decision about repository visibility.
+7. Repository visibility was changed to public by a separate, deliberate owner decision.
