@@ -139,3 +139,4 @@ contributing guide.
 - [Changelog](CHANGELOG.md)
 - [Support policy](SUPPORT.md)
 - [Funding and sponsor ethics](FUNDING.md)
+- [Sponsor LegacyGuard on GitHub](https://github.com/sponsors/jh505tt-create)

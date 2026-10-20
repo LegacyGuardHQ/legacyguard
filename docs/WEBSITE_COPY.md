@@ -117,17 +117,27 @@ credentials, or private documents as evidence.
 
 ## Funding
 
-Replace the GitHub Sponsors approval claim with:
+The repository's GitHub Sponsors profile is active. The informational website
+is separate from the application; this guidance does not publish or update it.
+Use the official profile link below if the owner approves updating the website.
+Keep the alpha and synthetic-data warnings visible alongside any funding appeal.
 
 ```text
-No verified public funding channel is active. Do not send money or payment
-details through issues, pull requests, discussions, or unsolicited messages.
-If funding opens later, the repository and this site will link only to a
-verified official destination and will publish how funds are intended to be
-used. Sponsorship will not buy access to user data, security exceptions, or
-roadmap control.
+Support responsible development through GitHub Sponsors:
+https://github.com/sponsors/jh505tt-create
+
+Sponsorship supports security and privacy review, accessibility, documentation,
+and safe demonstration prerequisites. LegacyGuard is alpha software, is not a
+public production service, and is not approved for real sensitive data. Use
+synthetic data only. Sponsorship does not provide access to private data,
+security exceptions, preferential vulnerability handling, or roadmap control.
+Sponsorships are not represented as tax-deductible.
+
+See the repository's funding guidance for the provisional goal and public
+aggregate-use reporting approach. Current monthly and one-time sponsorship
+options, if any, are shown on the linked GitHub Sponsors profile.
 ```
 
-Do not imply tax deductibility, Sponsors approval, users, partners, adoption,
-independent audit, compliance, production safety, or guaranteed timelines
-without current evidence.
+Do not imply users, partners, adoption, an independent audit, compliance,
+production safety, tax deductibility, or guaranteed timelines without current
+evidence.
