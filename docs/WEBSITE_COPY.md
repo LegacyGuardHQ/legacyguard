@@ -117,7 +117,7 @@ credentials, or private documents as evidence.
 
 ## Funding
 
-The repository's GitHub Sponsors profile is active. The informational website
+The repository's GitHub Sponsors profile is public. The informational website
 is separate from the application; this guidance does not publish or update it.
 Use the official profile link below if the owner approves updating the website.
 Keep the alpha and synthetic-data warnings visible alongside any funding appeal.
@@ -133,9 +133,8 @@ synthetic data only. Sponsorship does not provide access to private data,
 security exceptions, preferential vulnerability handling, or roadmap control.
 Sponsorships are not represented as tax-deductible.
 
-See the repository's funding guidance for the provisional goal and public
-aggregate-use reporting approach. Current monthly and one-time sponsorship
-options, if any, are shown on the linked GitHub Sponsors profile.
+Current sponsorship options, if any, are shown on the linked GitHub Sponsors
+profile.
 ```
 
 Do not imply users, partners, adoption, an independent audit, compliance,
