@@ -32,5 +32,9 @@ Feedback and issue reports do not authorize code contributions or transfer
 ownership. Pull requests are not accepted unless the project owner has
 specifically requested or authorized them. See [CONTRIBUTING.md](CONTRIBUTING.md).
 The repository license is AGPL-3.0 (see [LICENSE](LICENSE)); James Herrera is
-the current individual copyright holder. No verified public funding channel
-is represented by this support policy.
+the current individual copyright holder.
+
+Support LegacyGuard through the [official GitHub Sponsors profile](https://github.com/sponsors/jh505tt-create).
+See [FUNDING.md](FUNDING.md) for funding priorities and sponsor-independence
+terms. Do not send payment details through issues, pull requests, Discussions,
+or unsolicited messages.

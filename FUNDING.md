@@ -6,11 +6,16 @@ Funding is intended to convert tested software into a responsibly operated
 service. LegacyGuard should not accept sensitive continuity information on an
 unsafe free hosting arrangement.
 
-LegacyGuard is alpha software and does not currently have a verified public
-sponsorship account. When a verified channel is available, it will be added to
-GitHub's native funding configuration and this document. Until then, do not
-send money or payment details in response to an issue, pull request,
-discussion, or unsolicited message. Contributions are not represented as
+LegacyGuard is alpha software with a public [GitHub Sponsors profile](https://github.com/sponsors/jh505tt-create).
+Sponsorship is general support for responsible development; it does not make
+the application production-ready or approved for real personal or sensitive
+data. Use synthetic data only.
+
+The profile is publicly accessible. Check it for current sponsorship options
+and their specific benefits; this document does not promise tier rewards.
+
+Do not send money or payment details in response to an issue, pull request,
+discussion, or unsolicited message. Sponsorships are not represented as
 tax-deductible.
 
 ## Priorities
@@ -37,6 +42,6 @@ influence vendor decisions. Sponsor recognition is optional and must not imply
 certification or control.
 
 The published sponsorship terms must explain refunds, changed milestones, and
-restricted gifts. Funding conditions that conflict with the mission,
+restricted gifts. Any refund or billing matter is subject to the applicable
+GitHub Sponsors terms. Funding conditions that conflict with the mission,
 independence, user safety, or applicable law should be declined.
-
