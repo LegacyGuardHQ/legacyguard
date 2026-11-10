@@ -159,17 +159,32 @@ All eight required checks completed successfully on this merge commit:
 
 This verifies automated integration and release-check results for the specified commit. It does not establish successful production deployment, complete supply-chain security assurance, or permission to process sensitive real-world data.
 
-## Open maintenance follow-ups
+## Open maintenance follow-ups — recorded November 9, 2026
 
 The following items remain separate from the completed dependency modernization:
 
-- **Security inventory:** Reconfirm active Dependabot, code-scanning, and secret-scanning alerts using an authorized security interface. The available read-only GitHub connection did not provide the required alert inventory.
-- **Superseded dependency PR:** PR #66 remains open. Its TypeScript upgrade was superseded by merged PR #84. Closure requires separate explicit owner authorization.
 - **Test-client compatibility:** Review the previously observed Starlette/HTTPX `TestClient` deprecation warning as a non-blocking maintenance issue.
 - **Documentation review:** Reconcile historical CodeQL and repository-publication language in `docs/RC_VALIDATION.md` and `docs/PUBLICATION_READINESS.md` through separately reviewed changes.
 - **Branch housekeeping:** Review obsolete dependency branches before considering individually approved deletion.
 
 The separate informational website repository and its PR #7 are excluded from this application maintenance work.
+
+## Follow-up verification — November 10, 2026
+
+The subsequent read-only maintenance audit verified the following:
+
+- The security-alert inventory is available through the authorized GitHub
+  security interfaces:
+  - Dependabot: 0 open alerts and 73 fixed historical alerts
+  - Code scanning: 0 alerts
+  - Secret scanning: 0 alerts
+- PR #66 is closed, unmerged, and superseded by PR #84.
+- PR #85 merged successfully into `master` with commit
+  `5ade3b12cd50cc4758752f1c9bcb81ceae1cb93c`.
+
+The November 9 CI results above remain accurate historical evidence for commit
+`c21d36e3b4c3f749bf8f00df11c882cabcffeb30`; they are not being replaced by
+the later documentation merge.
 
 ## Operational status
 
