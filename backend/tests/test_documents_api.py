@@ -36,10 +36,25 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
-from app.models.document import Document
-from app.services.discovery_orchestrator import DISCOVERY_FAILED, DiscoveryOrchestrator, EncryptedDocumentTextProvider
+from app.models.document import (
+    DOCUMENT_SCAN_CLEAN,
+    DOCUMENT_SCAN_DETECTED,
+    DOCUMENT_SCAN_FAILED,
+    DOCUMENT_SCAN_NOT_SCANNED,
+    DOCUMENT_SCAN_PENDING,
+    DOCUMENT_SCAN_SCANNING,
+    DOCUMENT_STORAGE_STORED,
+    Document,
+)
+from app.services.discovery_orchestrator import (
+    DISCOVERY_FAILED,
+    DiscoveryOrchestrationError,
+    DiscoveryOrchestrator,
+    EncryptedDocumentTextProvider,
+)
 from app.services.document_storage import DocumentIntegrityError, StorageWriteResult
 from app.services.document_validation import DocumentValidationError, MAX_DOCUMENT_BYTES
+from app.services.document_validation import MalwareDetectedError, MalwareScanUnavailableError
 from app.services.rate_limit import rate_limiter
 
 client = TestClient(app)
@@ -139,6 +154,21 @@ class OpaqueMemoryStorage:
 
     def delete_permanently(self, locator: str) -> None:
         self.blobs.pop(locator, None)
+
+
+class CleanScanner:
+    def scan(self, content: bytes) -> None:
+        return None
+
+
+class DetectedScanner:
+    def scan(self, content: bytes) -> None:
+        raise MalwareDetectedError("synthetic detection")
+
+
+class FailedScanner:
+    def scan(self, content: bytes) -> None:
+        raise MalwareScanUnavailableError("synthetic scanner failure")
 
 
 def test_authenticated_user_creates_metadata_only_document_and_user_id_server_side() -> None:
@@ -421,6 +451,26 @@ def test_production_upload_rejects_missing_malware_scanner(monkeypatch) -> None:
         db.close()
 
 
+def test_upload_without_scanner_remains_inaccessible_to_discovery(monkeypatch) -> None:
+    token = _token("upload-unscanned-gate@example.com")
+    document = _post_document(token)
+    document_id = document.json()["id"]
+    monkeypatch.setattr(documents_api, "malware_scanner", None)
+
+    response = _upload_document(token, document_id)
+
+    assert response.status_code == 200
+    db = SessionLocal()
+    try:
+        saved = db.query(Document).filter(Document.id == document_id).one()
+        assert saved.storage_state == DOCUMENT_STORAGE_STORED
+        assert saved.malware_scan_status == DOCUMENT_SCAN_NOT_SCANNED
+        with pytest.raises(DiscoveryOrchestrationError, match="eligible storage state"):
+            EncryptedDocumentTextProvider().get_text(saved)
+    finally:
+        db.close()
+
+
 def test_production_upload_scans_before_encryption_and_storage(monkeypatch) -> None:
     class RecordingScanner:
         def __init__(self) -> None:
@@ -445,9 +495,51 @@ def test_production_upload_scans_before_encryption_and_storage(monkeypatch) -> N
         assert response.status_code == 200
         assert scanner.scanned == [plaintext]
         locator = _storage_locator(document_id)
+        db = SessionLocal()
+        try:
+            saved = db.query(Document).filter(Document.id == document_id).one()
+            assert saved.malware_scan_status == DOCUMENT_SCAN_CLEAN
+            assert saved.malware_scanner == "RecordingScanner"
+            assert saved.malware_scan_error_code is None
+        finally:
+            db.close()
     finally:
         if locator is not None:
             documents_api.document_storage.delete_permanently(locator)
+
+
+@pytest.mark.parametrize(
+    ("scanner", "expected_status", "expected_http_status"),
+    [
+        (DetectedScanner(), DOCUMENT_SCAN_DETECTED, 422),
+        (FailedScanner(), DOCUMENT_SCAN_FAILED, 503),
+    ],
+)
+def test_non_clean_scanner_verdicts_never_store_accessible_content(
+    monkeypatch,
+    scanner,
+    expected_status,
+    expected_http_status,
+) -> None:
+    token = _token(f"upload-non-clean-{expected_status}@example.com")
+    document = _post_document(token)
+    document_id = document.json()["id"]
+    monkeypatch.setattr(documents_api, "malware_scanner", scanner)
+
+    response = _upload_document(token, document_id)
+
+    assert response.status_code == expected_http_status
+    assert "synthetic" not in response.text
+    db = SessionLocal()
+    try:
+        saved = db.query(Document).filter(Document.id == document_id).one()
+        assert saved.malware_scan_status == expected_status
+        assert saved.storage_state == "FAILED"
+        assert saved.storage_reference_encrypted is None
+        assert saved.encryption_key_reference_encrypted is None
+        assert "synthetic" not in str(saved.malware_scan_error_code)
+    finally:
+        db.close()
 
 
 def test_upload_storage_builder_uses_configured_root(monkeypatch, tmp_path) -> None:
@@ -585,6 +677,7 @@ def test_upload_stores_encrypted_bytes_and_recoverable_plaintext() -> None:
 def test_upload_and_discovery_use_non_derivable_authoritative_locator(monkeypatch) -> None:
     storage = OpaqueMemoryStorage()
     monkeypatch.setattr(documents_api, "document_storage", storage)
+    monkeypatch.setattr(documents_api, "malware_scanner", CleanScanner())
     monkeypatch.setattr(documents_api, "_trigger_discovery_scan_after_upload", lambda *args, **kwargs: None)
     token = _token("opaque-storage@example.com")
     document_id = _post_document(
@@ -749,7 +842,8 @@ def test_upload_database_failure_after_storage_triggers_cleanup(monkeypatch) -> 
         db.close()
 
 
-def test_upload_triggers_discovery_scan_for_text_document() -> None:
+def test_upload_triggers_discovery_scan_for_text_document(monkeypatch) -> None:
+    monkeypatch.setattr(documents_api, "malware_scanner", CleanScanner())
     token = _token("upload-discovery@example.com")
     document = _post_document(token, original_filename="statement.txt", mime_type="text/plain", file_size=32)
     assert document.status_code == 201
@@ -831,7 +925,8 @@ def test_upload_does_not_bypass_existing_active_scan_limit() -> None:
         documents_api.document_storage.delete_permanently(_storage_locator(document_id))
 
 
-def test_upload_still_succeeds_when_discovery_extraction_unsupported() -> None:
+def test_upload_still_succeeds_when_discovery_extraction_unsupported(monkeypatch) -> None:
+    monkeypatch.setattr(documents_api, "malware_scanner", CleanScanner())
     token = _token("upload-discovery-pdf@example.com")
     document = _post_document(token)
     assert document.status_code == 201

@@ -30,7 +30,7 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
-from app.models.document import DOCUMENT_STORAGE_STORED, Document
+from app.models.document import DOCUMENT_SCAN_CLEAN, DOCUMENT_STORAGE_STORED, Document
 from app.models.user import User
 from app.services.audit import log_event
 from app.services.discovery_engine import DiscoveryEngine
@@ -173,7 +173,10 @@ class EncryptedDocumentTextProvider:
         self.extraction_service = extraction_service or DocumentExtractionService()
 
     def get_text(self, document: Document) -> str:
-        if document.storage_state != DOCUMENT_STORAGE_STORED:
+        if (
+            document.storage_state != DOCUMENT_STORAGE_STORED
+            or document.malware_scan_status != DOCUMENT_SCAN_CLEAN
+        ):
             raise DiscoveryOrchestrationError("Document content is not in an eligible storage state")
         encrypted_key_reference = document.encryption_key_reference_encrypted
         if encrypted_key_reference is None:

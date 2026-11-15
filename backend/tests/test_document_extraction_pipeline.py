@@ -25,7 +25,17 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
-from app.models.document import DOCUMENT_STORAGE_PENDING, DOCUMENT_STORAGE_STORED, Document
+from app.models.document import (
+    DOCUMENT_SCAN_CLEAN,
+    DOCUMENT_SCAN_DETECTED,
+    DOCUMENT_SCAN_FAILED,
+    DOCUMENT_SCAN_NOT_SCANNED,
+    DOCUMENT_SCAN_PENDING,
+    DOCUMENT_SCAN_SCANNING,
+    DOCUMENT_STORAGE_PENDING,
+    DOCUMENT_STORAGE_STORED,
+    Document,
+)
 from app.models.user import User
 from app.services.document_content_encryption import document_content_encryption_service
 from app.services.discovery_orchestrator import (
@@ -89,6 +99,7 @@ def _create_document_with_encrypted_content(*, mime_type: str, plaintext: bytes)
             mime_type=mime_type,
             encryption_key_reference_encrypted=encrypted.encrypted_key_reference,
             storage_state=DOCUMENT_STORAGE_STORED,
+            malware_scan_status=DOCUMENT_SCAN_CLEAN,
             ciphertext_sha256=encrypted.checksum_sha256,
             ciphertext_size=len(encrypted.encrypted_bytes),
         )
@@ -196,6 +207,30 @@ def test_pending_document_is_not_discovery_eligible() -> None:
         EncryptedDocumentTextProvider(storage=MemoryStorage(b"unused")).get_text(document)
 
 
+@pytest.mark.parametrize(
+    "scan_status",
+    [
+        DOCUMENT_SCAN_NOT_SCANNED,
+        DOCUMENT_SCAN_PENDING,
+        DOCUMENT_SCAN_SCANNING,
+        DOCUMENT_SCAN_DETECTED,
+        DOCUMENT_SCAN_FAILED,
+    ],
+)
+def test_only_clean_documents_are_discovery_eligible(scan_status: str) -> None:
+    document = Document(
+        id="550e8400-e29b-41d4-a716-446655440011",
+        user_id="user-1",
+        document_type="ACCOUNT_STATEMENT",
+        document_name="Untrusted",
+        storage_state=DOCUMENT_STORAGE_STORED,
+        malware_scan_status=scan_status,
+    )
+
+    with pytest.raises(DiscoveryOrchestrationError, match="eligible storage state"):
+        EncryptedDocumentTextProvider(storage=MemoryStorage(b"unused")).get_text(document)
+
+
 def test_stored_document_without_locator_fails_closed() -> None:
     document = Document(
         id="550e8400-e29b-41d4-a716-446655440010",
@@ -204,6 +239,7 @@ def test_stored_document_without_locator_fails_closed() -> None:
         document_name="Missing locator",
         mime_type="text/plain",
         storage_state=DOCUMENT_STORAGE_STORED,
+        malware_scan_status=DOCUMENT_SCAN_CLEAN,
         encryption_key_reference_encrypted="not-used",
     )
 
@@ -219,6 +255,7 @@ def test_tampered_encrypted_locator_fails_closed() -> None:
         document_name="Tampered locator",
         mime_type="text/plain",
         storage_state=DOCUMENT_STORAGE_STORED,
+        malware_scan_status=DOCUMENT_SCAN_CLEAN,
         encryption_key_reference_encrypted="not-used",
         storage_reference_encrypted="tampered",
     )

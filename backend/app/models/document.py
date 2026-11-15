@@ -60,6 +60,20 @@ DOCUMENT_STORAGE_STATE_VALUES = {
     DOCUMENT_STORAGE_STORED,
     DOCUMENT_STORAGE_FAILED,
 }
+DOCUMENT_SCAN_NOT_SCANNED = "NOT_SCANNED"
+DOCUMENT_SCAN_PENDING = "SCAN_PENDING"
+DOCUMENT_SCAN_SCANNING = "SCANNING"
+DOCUMENT_SCAN_CLEAN = "CLEAN"
+DOCUMENT_SCAN_DETECTED = "DETECTED"
+DOCUMENT_SCAN_FAILED = "SCAN_FAILED"
+DOCUMENT_SCAN_STATUS_VALUES = {
+    DOCUMENT_SCAN_NOT_SCANNED,
+    DOCUMENT_SCAN_PENDING,
+    DOCUMENT_SCAN_SCANNING,
+    DOCUMENT_SCAN_CLEAN,
+    DOCUMENT_SCAN_DETECTED,
+    DOCUMENT_SCAN_FAILED,
+}
 DOCUMENT_STORAGE_BACKEND_LOCAL = "LOCAL"
 DOCUMENT_STORAGE_BACKEND_OBJECT = "OBJECT"
 LEGACY_DOCUMENT_MASTER_KEY_ID = "legacy-current-v1"
@@ -71,6 +85,11 @@ class Document(Base):
         CheckConstraint(
             "storage_state IN ('PENDING', 'STORED', 'FAILED')",
             name="ck_documents_storage_state",
+        ),
+        CheckConstraint(
+            "malware_scan_status IN "
+            "('NOT_SCANNED', 'SCAN_PENDING', 'SCANNING', 'CLEAN', 'DETECTED', 'SCAN_FAILED')",
+            name="ck_documents_malware_scan_status",
         ),
     )
 
@@ -93,6 +112,10 @@ class Document(Base):
     storage_state = Column(String, nullable=False, default=DOCUMENT_STORAGE_PENDING, index=True)
     storage_state_updated_at = Column(DateTime(timezone=True), nullable=True)
     storage_error_code = Column(String, nullable=True)
+    malware_scan_status = Column(String, nullable=False, default=DOCUMENT_SCAN_NOT_SCANNED, index=True)
+    malware_scanned_at = Column(DateTime(timezone=True), nullable=True)
+    malware_scanner = Column(String, nullable=True)
+    malware_scan_error_code = Column(String, nullable=True)
     upload_attempt_id = Column(String, nullable=True, unique=True, index=True)
     ciphertext_sha256 = Column(String(length=64), nullable=True)
     ciphertext_size = Column(Integer, nullable=True)

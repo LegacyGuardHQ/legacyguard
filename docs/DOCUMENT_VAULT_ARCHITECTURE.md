@@ -307,11 +307,23 @@ Initial extensions:
 - Reject mismatches unless explicitly allowed by a safe mapping.
 - Store the server-verified MIME type.
 
-### Malware scanning hook
+### Malware scanning and content-access gate
 
-- Add a scanning stage before final active status.
-- Initial statuses may include `PENDING_SCAN`, `ACTIVE`, `QUARANTINED`, `REJECTED`.
-- Do not allow download until scan passes, unless an admin-only quarantine workflow exists.
+Document storage state and malware-verdict state are separate. A document may
+be physically stored while remaining unavailable for content processing.
+Persisted malware states are `NOT_SCANNED`, `SCAN_PENDING`, `SCANNING`, `CLEAN`,
+`DETECTED`, and `SCAN_FAILED`.
+
+- A document is eligible for Discovery or any future content reader only when
+  `storage_state=STORED` and `malware_scan_status=CLEAN`.
+- Scanner absence, timeout, exception, unknown state, and historical documents
+  without a recorded verdict are not clean.
+- Detection and scanner failure remain denied and retain only privacy-safe
+  internal error codes; scanner diagnostics and quarantine contents are never
+  returned through normal document APIs.
+- A future asynchronous scanner must claim and transition these states
+  transactionally, with stale `SCANNING` recovery and an isolated quarantine
+  storage namespace.
 
 ### Checksum validation
 
@@ -708,12 +720,17 @@ Future implementation tests should cover:
 The provider-neutral hardening layer uses three database-authoritative states:
 
 - `PENDING`: metadata exists without committed content, or one atomically claimed upload attempt is in progress.
-- `STORED`: encrypted content and its database metadata are committed. This is the transitional Discovery-eligible state and does **not** mean malware scanning occurred.
+- `STORED`: encrypted content and its database metadata are committed. This
+  state does **not** mean malware scanning occurred and is not sufficient for
+  Discovery or any other content reader; `malware_scan_status=CLEAN` is also
+  required.
 - `FAILED`: the current upload attempt failed and may be atomically replaced by a retry.
 
-`SCANNING`, `CLEAN`, `QUARANTINED`, and `REJECTED` are deliberately deferred
-until malware scanning is implemented. At that point, Discovery eligibility
-must move from transitional `STORED` to the approved clean state.
+Malware-verdict state is now persisted independently of storage state:
+`NOT_SCANNED`, `SCAN_PENDING`, `SCANNING`, `CLEAN`, `DETECTED`, and
+`SCAN_FAILED`. Existing documents are backfilled to `NOT_SCANNED`, never
+`CLEAN`. Discovery and future content readers require an attributable,
+server-recorded `CLEAN` verdict; `STORED` alone is not sufficient.
 
 Each successful new upload records an opaque UUID attempt ID, ciphertext SHA-256,
 ciphertext size, storage backend, encrypted backend-neutral locator, encryption
@@ -744,6 +761,11 @@ provider version ID when one is returned and verifies ciphertext size and SHA-25
 metadata before declaring the write stored. Database-authoritative ciphertext
 size and SHA-256 are still verified during reads; native provider integrity and
 encryption controls are supplementary.
+
+The malware-state migration is roll-forward-only. Its downgrade refuses before
+any schema or data operation because removing verdicts could let older
+application code process stored but unscanned content. Any application rollback
+requires an explicitly approved compatibility and data plan.
 
 Durable outbox/reconciliation beyond the exact-key ambiguous-write check,
 coordinated backup/restore and key recovery, deployment monitoring, retention and

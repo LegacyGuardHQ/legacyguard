@@ -147,7 +147,7 @@ def test_legacy_sensitive_values_are_encrypted_verified_and_plaintext_columns_re
                 )
             )
         }
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "a6b7c8d9e0f1"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "b7c8d9e0f1a2"
 
     assert cipher.decrypt(beneficiary_rows["beneficiary-plain"].contact_information_encrypted) == "legacy-beneficiary-contact"
     assert cipher.decrypt(beneficiary_rows["beneficiary-plain"].notes_encrypted) == "legacy-beneficiary-notes"
