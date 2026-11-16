@@ -140,3 +140,9 @@ contributing guide.
 - [Support policy](SUPPORT.md)
 - [Funding and sponsor ethics](FUNDING.md)
 - [Sponsor LegacyGuard on GitHub](https://github.com/sponsors/jh505tt-create)
+
+## Sponsorship and evidence-based progress
+
+LegacyGuard's [GitHub Sponsors profile](https://github.com/sponsors/jh505tt-create) is intended to support both development and the security, infrastructure, recovery, accessibility and operational work needed before a responsible service can be considered. Sponsorship is voluntary and does not buy access, security exceptions, roadmap control, guaranteed delivery or production readiness.
+
+Read the [funding and independence policy](FUNDING.md), [proposed milestone tracking and acceptance gates](docs/SPONSORSHIP_MILESTONES.md), and [quarterly aggregate funding report template](docs/FUNDING_REPORT_TEMPLATE.md). The live GitHub Sponsors profile and user-level Sponsor button have been confirmed; repository-level button display should be verified separately. The informational website does not collect payment details. No real sensitive data is authorized; use synthetic data only.
