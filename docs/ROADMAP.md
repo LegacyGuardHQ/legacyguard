@@ -52,3 +52,11 @@ the source-publication owner actions and branch-protection recommendations.
 - Continue review-queue clarity and accessibility improvements.
 - Keep discovery findings as signals for human review; do not automatically
   create or verify assets.
+
+## Security and sponsorship milestone tracking — proposed November 16, 2026
+
+See [Sponsorship and engineering milestones](SPONSORSHIP_MILESTONES.md) for seven evidence-gated milestones covering: (A) persisted scan-state and document-access protection, (B) trusted scanning and quarantine, (C) protected operations and recovery, (D) independent security/privacy/legal review, (E) accessibility and synthetic-data evaluation, (F) a private-beta decision, and (G) a separate public-beta decision. These milestone definitions are **proposed tracking records**, not native GitHub milestones or release promises.
+
+Security Foundation A has passed reported CI and independent review at [draft PR #87](https://github.com/LegacyGuardHQ/legacyguard/pull/87), but is **not merged or complete** as of this dated update. The production scanner, Windows AMSI integration, isolated quarantine workers, monitoring and recovery controls remain future engineering work.
+
+Each milestone should track actual issues, linked PRs, acceptance evidence, blockers and dated status. Funding receipt never substitutes for security review or completion evidence. Details of proposed quarterly financial disclosure are in [the funding report template](FUNDING_REPORT_TEMPLATE.md). Do not process real sensitive data or claim production readiness on the basis of these milestones.
