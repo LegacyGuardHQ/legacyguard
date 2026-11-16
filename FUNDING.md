@@ -45,3 +45,13 @@ The published sponsorship terms must explain refunds, changed milestones, and
 restricted gifts. Any refund or billing matter is subject to the applicable
 GitHub Sponsors terms. Funding conditions that conflict with the mission,
 independence, user safety, or applicable law should be declined.
+
+## Detailed sponsorship transparency — proposed November 16, 2026
+
+LegacyGuard intends to use sponsorship for **both engineering/development** and the operational safeguards needed before responsible hosting: independent assessment, privacy/legal guidance, managed infrastructure, encrypted backup/recovery, accessibility, incident response and maintenance.
+
+A **quarterly aggregate report** is proposed, when reliable financial records are available. See [the reporting template](docs/FUNDING_REPORT_TEMPLATE.md). Reports should distinguish gross receipts, refunds/chargebacks, platform deductions, net funds and spending by category; identify in-kind support and material conflicts; explain changed priorities and report milestone evidence. Available balances must be reconciled, not estimated. Do not disclose donor identities or private financial details without permission.
+
+This is an accountability commitment rather than a guarantee of separately restricted funds or an audited financial statement. The project should decline restricted sponsorships it cannot administer or track reliably. Sponsorships do not purchase roadmap influence, access, security exceptions or guaranteed releases. No milestone dates, fundraising totals, tier benefits or tax treatment are promised here. The official intended destination is the existing [GitHub Sponsors profile](https://github.com/sponsors/jh505tt-create); confirm the repository Sponsor button and current tier availability separately. The website does not collect payment data.
+
+For the proposed seven evidence-gated development stages see [sponsorship and engineering milestones](docs/SPONSORSHIP_MILESTONES.md). The project remains internal alpha and strictly synthetic-data-only.
