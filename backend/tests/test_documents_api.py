@@ -542,6 +542,62 @@ def test_non_clean_scanner_verdicts_never_store_accessible_content(
         db.close()
 
 
+
+
+def test_interrupted_malware_scanner_never_exposes_document_content(monkeypatch) -> None:
+    class SyntheticProcessInterruption(BaseException):
+        pass
+
+    class InterruptedScanner:
+        def scan(self, content: bytes) -> None:
+            raise SyntheticProcessInterruption("synthetic worker termination")
+
+    token = _token("upload-interrupted-scanner@example.com")
+    document_id = _post_document(token).json()["id"]
+    monkeypatch.setattr(documents_api, "malware_scanner", InterruptedScanner())
+
+    with pytest.raises(SyntheticProcessInterruption):
+        _upload_document(token, document_id)
+
+    db = SessionLocal()
+    try:
+        saved = db.query(Document).filter(Document.id == document_id).one()
+        # Process termination can strand SCANNING until recovery exists, but
+        # must never record CLEAN or commit a readable storage reference.
+        assert saved.malware_scan_status == DOCUMENT_SCAN_SCANNING
+        assert saved.storage_state != DOCUMENT_STORAGE_STORED
+        assert saved.storage_reference_encrypted is None
+        assert saved.encryption_key_reference_encrypted is None
+        with pytest.raises(DiscoveryOrchestrationError, match="eligible storage state"):
+            EncryptedDocumentTextProvider().get_text(saved)
+    finally:
+        db.close()
+
+
+def test_clean_verdict_does_not_authorize_modified_ciphertext(monkeypatch) -> None:
+    storage = OpaqueMemoryStorage()
+    monkeypatch.setattr(documents_api, "document_storage", storage)
+    monkeypatch.setattr(documents_api, "malware_scanner", CleanScanner())
+    monkeypatch.setattr(documents_api, "_trigger_discovery_scan_after_upload", lambda *args, **kwargs: None)
+    token = _token("upload-ciphertext-binding@example.com")
+    document_id = _post_document(token).json()["id"]
+
+    assert _upload_document(token, document_id).status_code == 200
+    db = SessionLocal()
+    try:
+        saved = db.query(Document).filter(Document.id == document_id).one()
+        assert saved.malware_scan_status == DOCUMENT_SCAN_CLEAN
+        locator = saved.get_storage_reference()
+        assert locator is not None
+        original = storage.blobs[locator]
+        storage.blobs[locator] = bytes([original[0] ^ 1]) + original[1:]
+
+        with pytest.raises(DocumentIntegrityError, match="checksum mismatch"):
+            EncryptedDocumentTextProvider(storage=storage).get_text(saved)
+    finally:
+        db.close()
+
+
 def test_upload_storage_builder_uses_configured_root(monkeypatch, tmp_path) -> None:
     configured_root = tmp_path / "configured-upload-storage"
     monkeypatch.setattr(documents_api.settings, "document_storage_root", str(configured_root))
