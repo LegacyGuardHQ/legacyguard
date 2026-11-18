@@ -728,3 +728,52 @@ def test_concurrent_updates_same_link_refresh_locked_state_on_postgres(monkeypat
     finally:
         db.close()
     _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monkeypatch) -> None:
+    """Two requests must not both reactivate the same inactive link."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    token = _token("same-reactivation-race@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "Reactivated Recipient")
+    created = _post_link(token, asset["id"], beneficiary["id"], percentage="25")
+    assert created.status_code == 201
+    assert _deactivate_link(token, asset["id"], beneficiary["id"]).status_code == 200
+    link_id = created.json()["id"]
+
+    def reactivate(percentage):
+        with TestClient(app) as worker:
+            return worker.post(
+                f"/assets/{asset['id']}/beneficiaries",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_id": beneficiary["id"],
+                    "beneficiary_role": "PRIMARY",
+                    "percentage": percentage,
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    first, second = _exercise_two_competing_postgres_mutations(
+        monkeypatch,
+        lambda: reactivate("40.00"),
+        lambda: reactivate("50.00"),
+    )
+    assert (first.status_code, second.status_code) == (201, 409)
+    db = SessionLocal()
+    try:
+        links = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.beneficiary_id == beneficiary["id"],
+        ).all()
+        assert len(links) == 1
+        assert links[0].id == link_id
+        assert links[0].is_active is True
+        assert Decimal(str(links[0].percentage)) == Decimal("40.00")
+    finally:
+        db.close()
+    _assert_active_primary_allocation_total_within_limit(asset["id"])
