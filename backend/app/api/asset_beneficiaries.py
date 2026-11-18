@@ -86,8 +86,18 @@ def create_asset_beneficiary_link(
     except AllocationValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
-    # A competing reactivation may have committed while we waited for the
-    # PostgreSQL asset lock. Validation refreshes existing link instances.
+    # The first pre-lock lookup may have found no link. Check again after
+    # serialized validation because a competing request could have inserted it
+    # while this transaction waited for the parent asset lock.
+    existing = (
+        db.query(AssetBeneficiary)
+        .filter(
+            AssetBeneficiary.asset_id == asset_id,
+            AssetBeneficiary.beneficiary_id == payload.beneficiary_id,
+        )
+        .populate_existing()
+        .first()
+    )
     if existing is not None and existing.is_active:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active asset-beneficiary link already exists")
 
