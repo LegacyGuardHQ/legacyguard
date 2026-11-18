@@ -86,6 +86,11 @@ def create_asset_beneficiary_link(
     except AllocationValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
+    # A competing reactivation may have committed while we waited for the
+    # PostgreSQL asset lock. Validation refreshes existing link instances.
+    if existing is not None and existing.is_active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active asset-beneficiary link already exists")
+
     now = datetime.now(timezone.utc)
     if existing is not None:
         link = existing
