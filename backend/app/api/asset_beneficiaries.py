@@ -86,6 +86,13 @@ def create_asset_beneficiary_link(
     except AllocationValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
+    # The asset may have been archived after the initial lifecycle check.
+    # Allocation validation holds the PostgreSQL asset row lock through commit;
+    # refresh the cached asset and reject mutations against archived assets.
+    if db.get_bind().dialect.name == "postgresql":
+        db.refresh(asset)
+        validate_link_lifecycle_for_mutation(asset, beneficiary)
+
     # The first pre-lock lookup may have found no link. Check again after
     # serialized validation because a competing request could have inserted it
     # while this transaction waited for the parent asset lock.
@@ -175,6 +182,13 @@ def update_asset_beneficiary_link(
         validate_asset_allocation_change(db, asset_id, payload.beneficiary_role, payload.percentage, link_id=link.id)
     except AllocationValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    # The asset may have been archived after the initial lifecycle check.
+    # Allocation validation holds the PostgreSQL asset row lock through commit;
+    # refresh the cached asset and reject mutations against archived assets.
+    if db.get_bind().dialect.name == "postgresql":
+        db.refresh(asset)
+        validate_link_lifecycle_for_mutation(asset, beneficiary)
 
     now = datetime.now(timezone.utc)
     link.beneficiary_role = payload.beneficiary_role
