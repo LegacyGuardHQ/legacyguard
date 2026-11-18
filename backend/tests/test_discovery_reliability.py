@@ -24,7 +24,7 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
-from app.models.document import Document
+from app.models.document import DOCUMENT_SCAN_CLEAN, DOCUMENT_STORAGE_STORED, Document
 from app.models.user import User
 from app.services.discovery_orchestrator import (
     DiscoveryScanExecutor,
@@ -75,9 +75,12 @@ def _seed_documents() -> None:
     db = SessionLocal()
     try:
         user = User(id="user-1", email="user-1@example.com", password_hash="hash")
-        good = Document(id="good-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Good")
-        bad = Document(id="bad-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Bad")
-        failed = Document(id="failed-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Failed")
+        # Synthetic providers model extraction behavior only. Give these fixtures
+        # an eligible scan verdict so tests exercise warnings and failures after
+        # the orchestrator-level malware gate (non-clean states are tested separately).
+        good = Document(id="good-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Good", storage_state=DOCUMENT_STORAGE_STORED, malware_scan_status=DOCUMENT_SCAN_CLEAN)
+        bad = Document(id="bad-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Bad", storage_state=DOCUMENT_STORAGE_STORED, malware_scan_status=DOCUMENT_SCAN_CLEAN)
+        failed = Document(id="failed-doc", user_id=user.id, document_type="ACCOUNT_STATEMENT", document_name="Failed", storage_state=DOCUMENT_STORAGE_STORED, malware_scan_status=DOCUMENT_SCAN_CLEAN)
         db.add_all([user, good, bad, failed])
         db.commit()
     finally:

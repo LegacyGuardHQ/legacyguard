@@ -20,7 +20,7 @@ from app.models.discovery import (
     DiscoveryScan,
     EvidenceFinding,
 )
-from app.models.document import Document
+from app.models.document import DOCUMENT_SCAN_CLEAN, DOCUMENT_STORAGE_STORED, Document
 from app.services import discovery_orchestrator as discovery_orchestrator_module
 from app.services.audit import log_event
 from app.services.rate_limit import rate_limiter
@@ -71,6 +71,16 @@ def test_discovery_auth_required() -> None:
 def test_user_can_start_scan(monkeypatch) -> None:
     token = _token("owner@example.com")
     document_id = _create_document(token)
+    # This test exercises successful background processing using a fake text
+    # provider; set a synthetic trusted verdict before invoking Discovery.
+    db = SessionLocal()
+    try:
+        document = db.query(Document).filter(Document.id == document_id).one()
+        document.storage_state = DOCUMENT_STORAGE_STORED
+        document.malware_scan_status = DOCUMENT_SCAN_CLEAN
+        db.commit()
+    finally:
+        db.close()
     monkeypatch.setattr(discovery_api.discovery_orchestrator, "text_provider", ApiFakeTextProvider())
 
     response = client.post("/discovery/scans", headers={"Authorization": f"Bearer {token}"}, json={"document_ids": [document_id]})
