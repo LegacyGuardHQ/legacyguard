@@ -102,9 +102,6 @@ def validate_asset_allocation_change(
 ) -> AllocationValidationResult:
     validate_beneficiary_role(role)
     validate_individual_percentage(percentage)
-    if role == BENEFICIARY_ROLE_INFORMATIONAL:
-        return AllocationValidationResult(role=role, total=Decimal("0"), is_complete=False)
-
     # Serialize checks and writes for each asset under PostgreSQL READ COMMITTED.
     # Lock the existing parent asset row, since the allocation link rows may not
     # exist yet. The caller must keep this transaction open through db.commit().
@@ -118,4 +115,6 @@ def validate_asset_allocation_change(
     if db.get_bind().dialect.name == "postgresql":
         links_query = links_query.populate_existing()
     links = links_query.all()
+    if role == BENEFICIARY_ROLE_INFORMATIONAL:
+        return AllocationValidationResult(role=role, total=Decimal("0"), is_complete=False)
     return validate_active_role_total(links, role, proposed_link_id=link_id, proposed_percentage=percentage)
