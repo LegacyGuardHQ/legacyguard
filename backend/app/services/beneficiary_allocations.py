@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.models.asset import Asset
 from app.models.asset_beneficiary import (
     BENEFICIARY_ROLE_CONTINGENT,
     BENEFICIARY_ROLE_INFORMATIONAL,
@@ -103,6 +104,13 @@ def validate_asset_allocation_change(
     validate_individual_percentage(percentage)
     if role == BENEFICIARY_ROLE_INFORMATIONAL:
         return AllocationValidationResult(role=role, total=Decimal("0"), is_complete=False)
+
+    # Serialize checks and writes for each asset under PostgreSQL READ COMMITTED.
+    # Lock the existing parent asset row, since the allocation link rows may not
+    # exist yet. The caller must keep this transaction open through db.commit().
+    # SQLite does not implement SELECT FOR UPDATE and retains its existing path.
+    if db.get_bind().dialect.name == "postgresql":
+        db.query(Asset.id).filter(Asset.id == asset_id).with_for_update().one()
 
     links = db.query(AssetBeneficiary).filter(AssetBeneficiary.asset_id == asset_id).all()
     return validate_active_role_total(links, role, proposed_link_id=link_id, proposed_percentage=percentage)
