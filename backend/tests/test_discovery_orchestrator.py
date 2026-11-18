@@ -498,6 +498,48 @@ def test_orchestrator_rejects_documents_owned_by_another_user() -> None:
         db.close()
 
 
+
+def test_clean_foreign_document_cannot_reach_injected_text_provider() -> None:
+    # The foreign document is otherwise eligible; ownership alone must block
+    # discovery before any custom provider or analysis engine is called.
+    owner_id, foreign_document_id = _create_user_and_document(
+        user_id="document-owner", document_id="clean-foreign-doc"
+    )
+    provider = FakeTextProvider()
+    discovery_engine = FakeDiscoveryEngine()
+    db = SessionLocal()
+    try:
+        db.add(User(id="requesting-user", email="requesting-user@example.com", password_hash="hash"))
+        db.commit()
+
+        document = db.query(Document).filter(Document.id == foreign_document_id).one()
+        assert document.user_id == owner_id
+        assert document.storage_state == DOCUMENT_STORAGE_STORED
+        assert document.malware_scan_status == DOCUMENT_SCAN_CLEAN
+
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=provider,
+            discovery_engine=discovery_engine,
+            privacy_service=FakePrivacyService(),
+        )
+        with pytest.raises(DiscoveryOrchestrationError, match="Discovery scan failed"):
+            orchestrator.run_scan(
+                db,
+                user_id="requesting-user",
+                document_ids=[foreign_document_id],
+            )
+
+        assert provider.called is False
+        assert discovery_engine.called is False
+        failed_scan = db.query(DiscoveryScan).filter(DiscoveryScan.user_id == "requesting-user").one()
+        assert failed_scan.status == DISCOVERY_SCAN_STATUS_FAILED
+        assert db.query(DiscoveryScanDocument).count() == 0
+        assert db.query(EvidenceFinding).count() == 0
+    finally:
+        db.close()
+
+
+
 def test_orchestrator_calls_discovery_engine() -> None:
     _user_id, document_id = _create_user_and_document()
     engine = FakeDiscoveryEngine()
