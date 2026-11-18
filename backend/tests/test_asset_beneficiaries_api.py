@@ -889,3 +889,78 @@ def test_asset_archived_during_link_update_is_rejected_on_postgres(monkeypatch) 
         assert Decimal(str(stored.percentage)) == Decimal("30.00")
     finally:
         db.close()
+
+
+@pytest.mark.parametrize("lifecycle_action", ["archive", "mark-deceased"])
+def test_beneficiary_lifecycle_change_during_link_update_is_rejected_on_postgres(
+    monkeypatch, lifecycle_action: str
+) -> None:
+    """A beneficiary lifecycle change between link checks must prohibit mutation."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    from app.api import asset_beneficiaries as links_api
+
+    token = _token(f"beneficiary-lifecycle-race-{lifecycle_action}@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "Concurrent Lifecycle Recipient")
+    assert _post_link(token, asset["id"], beneficiary["id"], percentage="30").status_code == 201
+
+    checked_lifecycle = Event()
+    lifecycle_committed = Event()
+    original_check = links_api.validate_link_lifecycle_for_mutation
+    reached_checks = []
+
+    def pause_after_first_lifecycle_check(asset_obj, beneficiary_obj):
+        original_check(asset_obj, beneficiary_obj)
+        reached_checks.append(True)
+        if len(reached_checks) == 1:
+            checked_lifecycle.set()
+            assert lifecycle_committed.wait(timeout=10), "Beneficiary lifecycle change did not complete"
+
+    monkeypatch.setattr(links_api, "validate_link_lifecycle_for_mutation", pause_after_first_lifecycle_check)
+
+    def update_link():
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{beneficiary['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY",
+                    "percentage": "50.00",
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending_update = pool.submit(update_link)
+        try:
+            assert checked_lifecycle.wait(timeout=10), "Link update did not reach lifecycle validation"
+            with TestClient(app) as lifecycle_client:
+                changed = lifecycle_client.post(
+                    f"/beneficiaries/{beneficiary['id']}/{lifecycle_action}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            assert changed.status_code == 200
+            if lifecycle_action == "archive":
+                assert changed.json()["status"] == BENEFICIARY_STATUS_ARCHIVED
+            else:
+                assert changed.json()["is_deceased"] is True
+        finally:
+            lifecycle_committed.set()
+        updated = pending_update.result(timeout=20)
+
+    assert updated.status_code == 400
+    assert ("Archived beneficiaries" if lifecycle_action == "archive" else "Deceased beneficiaries") in updated.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        stored = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.beneficiary_id == beneficiary["id"],
+        ).one()
+        assert Decimal(str(stored.percentage)) == Decimal("30.00")
+    finally:
+        db.close()
