@@ -11,6 +11,12 @@ from app.database.connection import SessionLocal, begin_serialized_write
 from app.models.asset import ASSET_STATUS_ARCHIVED, Asset
 from app.models.beneficiary import BENEFICIARY_STATUS_ARCHIVED, Beneficiary
 from app.models.document import (
+    DOCUMENT_SCAN_CLEAN,
+    DOCUMENT_SCAN_DETECTED,
+    DOCUMENT_SCAN_FAILED,
+    DOCUMENT_SCAN_NOT_SCANNED,
+    DOCUMENT_SCAN_PENDING,
+    DOCUMENT_SCAN_SCANNING,
     DOCUMENT_STATUS_ACTIVE,
     DOCUMENT_STORAGE_FAILED,
     DOCUMENT_STORAGE_PENDING,
@@ -40,7 +46,9 @@ from app.services.document_storage_factory import build_document_storage
 from app.services.document_validation import (
     MAX_DOCUMENT_BYTES,
     DocumentValidationError,
+    MalwareDetectedError,
     MalwareScanner,
+    MalwareScanUnavailableError,
     validate_document_size,
     validate_extension_and_mime,
     validate_magic_bytes,
@@ -284,6 +292,26 @@ def _mark_upload_failed(db: Session, document_id: str, attempt_id: str, error_co
     db.commit()
 
 
+def _set_malware_scan_state(
+    db: Session,
+    document: Document,
+    state: str,
+    *,
+    scanner: str | None = None,
+    error_code: str | None = None,
+) -> None:
+    document.malware_scan_status = state
+    document.malware_scanned_at = (
+        datetime.now(timezone.utc)
+        if state in {DOCUMENT_SCAN_CLEAN, DOCUMENT_SCAN_DETECTED, DOCUMENT_SCAN_FAILED}
+        else None
+    )
+    document.malware_scanner = scanner
+    document.malware_scan_error_code = error_code
+    db.commit()
+    db.refresh(document)
+
+
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def create_document_metadata(
     payload: DocumentCreate,
@@ -394,8 +422,6 @@ async def upload_encrypted_document_content(
         content = await _read_bounded_upload(file)
         filename, _extension = validate_extension_and_mime(file.filename or "", file.content_type or "")
         validate_magic_bytes(content, file.content_type or "")
-        if malware_scanner is not None:
-            malware_scanner.scan(content)
         encrypted = document_content_encryption_service.encrypt(document.id, content)
     except (DocumentValidationError, DocumentContentEncryptionError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
@@ -404,7 +430,65 @@ async def upload_encrypted_document_content(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document upload failed") from exc
 
     storage_reference: str | None = None
+    document.malware_scan_status = (
+        DOCUMENT_SCAN_PENDING if malware_scanner is not None else DOCUMENT_SCAN_NOT_SCANNED
+    )
+    document.malware_scanned_at = None
+    document.malware_scanner = None
+    document.malware_scan_error_code = None
     attempt_id = _claim_upload_attempt(db, document)
+
+    if malware_scanner is not None:
+        scanner_name = malware_scanner.__class__.__name__
+        _set_malware_scan_state(
+            db,
+            document,
+            DOCUMENT_SCAN_SCANNING,
+            scanner=scanner_name,
+        )
+        try:
+            malware_scanner.scan(content)
+        except MalwareDetectedError as exc:
+            _set_malware_scan_state(
+                db,
+                document,
+                DOCUMENT_SCAN_DETECTED,
+                scanner=scanner_name,
+                error_code="MALWARE_DETECTED",
+            )
+            _mark_upload_failed(db, document.id, attempt_id, "MALWARE_DETECTED")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Document failed malware scanning",
+            ) from exc
+        except MalwareScanUnavailableError as exc:
+            _set_malware_scan_state(
+                db,
+                document,
+                DOCUMENT_SCAN_FAILED,
+                scanner=scanner_name,
+                error_code="MALWARE_SCAN_FAILED",
+            )
+            _mark_upload_failed(db, document.id, attempt_id, "MALWARE_SCAN_FAILED")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Document malware scanning is unavailable",
+            ) from exc
+        except Exception as exc:
+            _set_malware_scan_state(
+                db,
+                document,
+                DOCUMENT_SCAN_FAILED,
+                scanner=scanner_name,
+                error_code="MALWARE_SCAN_FAILED",
+            )
+            _mark_upload_failed(db, document.id, attempt_id, "MALWARE_SCAN_FAILED")
+            logger.exception("Document malware scan failed", extra={"document_id": document.id})
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Document malware scanning is unavailable",
+            ) from exc
+
     try:
         write_result = document_storage.save_encrypted(document.id, encrypted.encrypted_bytes)
         storage_reference = write_result.locator
@@ -423,6 +507,16 @@ async def upload_encrypted_document_content(
         document.storage_backend = document_storage.backend_name
         document.storage_provider_version = write_result.provider_version
         document.storage_state = DOCUMENT_STORAGE_STORED
+        if malware_scanner is not None:
+            document.malware_scan_status = DOCUMENT_SCAN_CLEAN
+            document.malware_scanned_at = datetime.now(timezone.utc)
+            document.malware_scanner = malware_scanner.__class__.__name__
+            document.malware_scan_error_code = None
+        else:
+            document.malware_scan_status = DOCUMENT_SCAN_NOT_SCANNED
+            document.malware_scanned_at = None
+            document.malware_scanner = None
+            document.malware_scan_error_code = None
         document.storage_state_updated_at = now
         document.storage_error_code = None
         document.master_key_id = settings.document_master_key_id

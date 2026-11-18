@@ -6,7 +6,12 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 
 
-def _run_alembic(backend_root: Path, database_url: str, *arguments: str) -> None:
+def _run_alembic(
+    backend_root: Path,
+    database_url: str,
+    *arguments: str,
+    expected_returncode: int = 0,
+) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment.update(
         {
@@ -24,10 +29,11 @@ def _run_alembic(backend_root: Path, database_url: str, *arguments: str) -> None
         text=True,
         check=False,
     )
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == expected_returncode, result.stderr
+    return result
 
 
-def test_rc_document_rows_backfill_and_downgrade_without_reference_loss(tmp_path: Path) -> None:
+def test_rc_document_rows_backfill_and_downgrade_refusal_preserves_state(tmp_path: Path) -> None:
     backend_root = Path(__file__).resolve().parents[1]
     database_path = tmp_path / "rc-upgrade.db"
     database_url = f"sqlite:///{database_path.as_posix()}"
@@ -54,14 +60,14 @@ def test_rc_document_rows_backfill_and_downgrade_without_reference_loss(tmp_path
                 },
             )
 
-    _run_alembic(backend_root, database_url, "upgrade", "f4a5b6c7d8e9")
+    _run_alembic(backend_root, database_url, "upgrade", "head")
     with engine.connect() as connection:
         rows = {
             row.id: row
             for row in connection.execute(
                 text(
                     "SELECT id, storage_state, storage_backend, master_key_id, "
-                    "storage_reference_encrypted FROM documents"
+                    "storage_reference_encrypted, malware_scan_status FROM documents"
                 )
             )
         }
@@ -69,12 +75,53 @@ def test_rc_document_rows_backfill_and_downgrade_without_reference_loss(tmp_path
         assert rows["stored-document"].storage_backend == "LOCAL"
         assert rows["stored-document"].master_key_id == "legacy-current-v1"
         assert rows["stored-document"].storage_reference_encrypted == "encrypted-local-reference"
+        assert rows["stored-document"].malware_scan_status == "NOT_SCANNED"
         assert rows["metadata-only-document"].storage_state == "PENDING"
         assert rows["metadata-only-document"].master_key_id is None
+        assert rows["metadata-only-document"].malware_scan_status == "NOT_SCANNED"
 
-    _run_alembic(backend_root, database_url, "downgrade", "e3f4a5b6c7d8")
-    assert "storage_state" not in {column["name"] for column in inspect(engine).get_columns("documents")}
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE documents SET malware_scan_status = CASE id "
+                "WHEN 'stored-document' THEN 'CLEAN' "
+                "WHEN 'metadata-only-document' THEN 'DETECTED' END"
+            )
+        )
+
+    downgrade_result = _run_alembic(
+        backend_root,
+        database_url,
+        "downgrade",
+        "a6b7c8d9e0f1",
+        expected_returncode=1,
+    )
+    assert "roll-forward-only" in downgrade_result.stderr
+    assert "malware_scan_status" in {column["name"] for column in inspect(engine).get_columns("documents")}
     with engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT storage_reference_encrypted FROM documents WHERE id = 'stored-document'")
-        ).scalar_one() == "encrypted-local-reference"
+        rows = {
+            row.id: row
+            for row in connection.execute(
+                text(
+                    "SELECT id, storage_reference_encrypted, malware_scan_status "
+                    "FROM documents ORDER BY id"
+                )
+            )
+        }
+        assert rows["stored-document"].storage_reference_encrypted == "encrypted-local-reference"
+        assert rows["stored-document"].malware_scan_status == "CLEAN"
+        assert rows["metadata-only-document"].malware_scan_status == "DETECTED"
+
+    _run_alembic(backend_root, database_url, "upgrade", "head")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "b7c8d9e0f1a2"
+
+
+def test_document_malware_migration_has_one_head(tmp_path: Path) -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    database_url = f"sqlite:///{(tmp_path / 'head-check.db').as_posix()}"
+
+    heads_result = _run_alembic(backend_root, database_url, "heads")
+
+    assert heads_result.stdout.count("(head)") == 1
+    assert "b7c8d9e0f1a2" in heads_result.stdout

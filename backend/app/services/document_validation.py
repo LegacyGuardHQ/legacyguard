@@ -23,6 +23,14 @@ class DocumentValidationError(ValueError):
     pass
 
 
+class MalwareDetectedError(RuntimeError):
+    """The configured malware scanner detected malicious content."""
+
+
+class MalwareScanUnavailableError(RuntimeError):
+    """The configured malware scanner could not complete safely."""
+
+
 class MalwareScanner:
     def scan(self, content: bytes) -> None:
         raise NotImplementedError("Malware scanning hook is not implemented")

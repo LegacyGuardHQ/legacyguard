@@ -201,7 +201,10 @@ Restore requires the same environment values and the same encryption key. Losing
 - Verify /health/live and /health/ready after rollback.
 - Re-run the isolated deployment smoke test after rollback, then run a separate
   environment-specific production verification against disposable resources.
-- Do not rely on automatic Alembic downgrade.
+- Do not rely on automatic Alembic downgrade. The document malware scan-state
+  migration is explicitly roll-forward-only; its downgrade refuses before
+  changing the schema. Any application rollback requires an approved
+  compatibility and data plan that preserves the clean-content gate.
 
 ## Isolated deployment smoke test
 

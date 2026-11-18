@@ -47,7 +47,9 @@ and security boundaries kept separate where practical.
 - Production configuration requires private S3-compatible object storage.
 
 Production configuration rejects SQLite and local document storage. Those
-checks do not by themselves establish production readiness.
+checks do not by themselves establish production readiness. Persisted malware
+scan state is separate from storage state, and content readers require a
+server-recorded `CLEAN` verdict in addition to stored encrypted content.
 
 ## Request and authorization boundaries
 
@@ -80,10 +82,13 @@ references, ciphertext size, version, and integrity metadata are recorded in
 the database.
 
 Uploads are bounded and validated for filename, extension, declared MIME type,
-and selected magic bytes before encryption. In production, uploads return HTTP
-503 unless a malware scanner is configured. The repository provides only the
-scanner interface; a real scanner and quarantine workflow remain operational
-requirements.
+and selected magic bytes before encryption. Malware scan state is persisted as
+`NOT_SCANNED`, `SCAN_PENDING`, `SCANNING`, `CLEAN`, `DETECTED`, or
+`SCAN_FAILED`; uploads without a configured scanner are never treated as clean.
+In production, uploads return HTTP 503 unless a malware scanner is configured.
+The repository provides the state gate and scanner interface; a real isolated
+scanner, asynchronous worker, timeout policy, and quarantine storage workflow
+remain operational requirements.
 
 See [DATA_PROTECTION.md](DATA_PROTECTION.md) for field-level boundaries and
 [DEPLOYMENT.md](DEPLOYMENT.md) for deployment requirements.
@@ -116,7 +121,8 @@ isolation, and production workload controls are future operational work.
 
 Before any real-data service is offered, operators still need:
 
-- real malware scanning and quarantine
+- real malware scanning, isolated quarantine, timeout/isolation controls, and
+  scanner-worker operations
 - coordinated PostgreSQL/object-storage backup and restore
 - managed encryption-key recovery and rotation
 - trusted ingress, HTTPS, and proxy configuration

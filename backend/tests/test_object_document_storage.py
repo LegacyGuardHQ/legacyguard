@@ -17,8 +17,8 @@ os.environ.setdefault("ENCRYPTION_KEY", "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWF
 os.environ.setdefault("JWT_SECRET", "dev-jwt-secret-123456")
 os.environ.setdefault("ENVIRONMENT", "testing")
 
-from app.models.document import DOCUMENT_STORAGE_STORED, Document
-from app.services.discovery_orchestrator import EncryptedDocumentTextProvider
+from app.models.document import DOCUMENT_SCAN_CLEAN, DOCUMENT_STORAGE_STORED, Document
+from app.services.discovery_orchestrator import DiscoveryOrchestrationError, EncryptedDocumentTextProvider
 from app.services.document_content_encryption import document_content_encryption_service
 from app.services.document_storage import DocumentIntegrityError, DocumentStorageError
 from app.services.document_storage_factory import build_document_storage
@@ -155,6 +155,7 @@ def test_object_backed_discovery_uses_exact_locator(object_storage) -> None:
         document_name="Synthetic statement",
         mime_type="text/plain",
         storage_state=DOCUMENT_STORAGE_STORED,
+        malware_scan_status=DOCUMENT_SCAN_CLEAN,
         encryption_key_reference_encrypted=encrypted.encrypted_key_reference,
         ciphertext_sha256=encrypted.checksum_sha256,
         ciphertext_size=len(encrypted.encrypted_bytes),
@@ -162,6 +163,27 @@ def test_object_backed_discovery_uses_exact_locator(object_storage) -> None:
     document.set_storage_reference(result.locator)
 
     assert EncryptedDocumentTextProvider(storage=object_storage).get_text(document) == "retirement account"
+
+
+def test_object_backed_discovery_denies_stored_document_without_clean_verdict(object_storage) -> None:
+    document_id = str(uuid.uuid4())
+    encrypted = document_content_encryption_service.encrypt(document_id, b"retirement account")
+    result = object_storage.save_encrypted(document_id, encrypted.encrypted_bytes)
+    document = Document(
+        id=document_id,
+        user_id="synthetic-user",
+        document_type="ACCOUNT_STATEMENT",
+        document_name="Synthetic statement",
+        mime_type="text/plain",
+        storage_state=DOCUMENT_STORAGE_STORED,
+        encryption_key_reference_encrypted=encrypted.encrypted_key_reference,
+        ciphertext_sha256=encrypted.checksum_sha256,
+        ciphertext_size=len(encrypted.encrypted_bytes),
+    )
+    document.set_storage_reference(result.locator)
+
+    with pytest.raises(DiscoveryOrchestrationError, match="eligible storage state"):
+        EncryptedDocumentTextProvider(storage=object_storage).get_text(document)
 
 
 class AmbiguousPutClient:
