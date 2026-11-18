@@ -556,8 +556,14 @@ def test_interrupted_malware_scanner_never_exposes_document_content(monkeypatch)
     document_id = _post_document(token).json()["id"]
     monkeypatch.setattr(documents_api, "malware_scanner", InterruptedScanner())
 
-    with pytest.raises(SyntheticProcessInterruption):
+    # Starlette/AnyIO wraps abrupt BaseException failures in a task-group
+    # exception group. Verify the actual scanner interruption is present.
+    with pytest.raises(BaseExceptionGroup) as interruption:
         _upload_document(token, document_id)
+    assert any(
+        isinstance(exc, SyntheticProcessInterruption)
+        for exc in interruption.value.exceptions
+    )
 
     db = SessionLocal()
     try:
