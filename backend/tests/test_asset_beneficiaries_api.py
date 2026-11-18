@@ -1,4 +1,7 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
+from threading import Event
 
 import pytest
 from fastapi.testclient import TestClient
@@ -463,3 +466,69 @@ def test_relinking_reactivates_existing_inactive_link() -> None:
     assert payload["id"] == original.json()["id"]
     assert payload["beneficiary_role"] == "SUCCESSOR"
     assert payload["percentage"] == "45.00"
+
+
+def test_simultaneous_primary_allocations_cannot_exceed_100_on_postgres(monkeypatch) -> None:
+    """Concurrent API requests must not both accept allocations totaling 120%."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL row-locking and separate concurrent transactions")
+
+    from app.api import asset_beneficiaries as links_api
+
+    token = _token("concurrent-allocations@example.com")
+    asset = _create_asset(token)
+    first = _create_beneficiary(token, "Concurrent First")
+    second = _create_beneficiary(token, "Concurrent Second")
+
+    first_validated = Event()
+    second_completed = Event()
+    original_validate = links_api.validate_asset_allocation_change
+
+    def coordinated_validate(db, asset_id, role, percentage, *, link_id=None):
+        result = original_validate(db, asset_id, role, percentage, link_id=link_id)
+        if not first_validated.is_set():
+            first_validated.set()
+            # Keep the first request before commit long enough for the other
+            # request to attempt validation. Under a per-asset row lock, that
+            # second request must wait until the first commits.
+            second_completed.wait(timeout=2)
+        return result
+
+    monkeypatch.setattr(links_api, "validate_asset_allocation_change", coordinated_validate)
+
+    def post_for(beneficiary_id: str):
+        with TestClient(app) as request_client:
+            return request_client.post(
+                f"/assets/{asset['id']}/beneficiaries",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_id": beneficiary_id,
+                    "beneficiary_role": "PRIMARY",
+                    "percentage": "60.00",
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_request = pool.submit(post_for, first["id"])
+        assert first_validated.wait(timeout=10), "First request never reached allocation validation"
+        second_request = pool.submit(post_for, second["id"])
+        try:
+            second_response = second_request.result(timeout=15)
+        finally:
+            second_completed.set()
+        first_response = first_request.result(timeout=15)
+
+    assert sorted([first_response.status_code, second_response.status_code]) == [201, 422]
+    db = SessionLocal()
+    try:
+        links = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.is_active.is_(True),
+            AssetBeneficiary.beneficiary_role == "PRIMARY",
+        ).all()
+        assert sum((Decimal(str(link.percentage)) for link in links), Decimal("0")) <= Decimal("100")
+    finally:
+        db.close()
