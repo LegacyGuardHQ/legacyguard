@@ -823,3 +823,69 @@ def test_concurrent_creation_of_same_new_link_returns_conflict_on_postgres(monke
     finally:
         db.close()
     _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+def test_asset_archived_during_link_update_is_rejected_on_postgres(monkeypatch) -> None:
+    """An archive committed after the initial lifecycle check must block the update."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    from app.api import asset_beneficiaries as links_api
+
+    token = _token("concurrent-asset-archive@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "Archive Race Recipient")
+    assert _post_link(token, asset["id"], beneficiary["id"], percentage="30").status_code == 201
+
+    checked_lifecycle = Event()
+    archive_committed = Event()
+    original_check = links_api.validate_link_lifecycle_for_mutation
+
+    def pause_after_lifecycle_check(asset_obj, beneficiary_obj):
+        original_check(asset_obj, beneficiary_obj)
+        checked_lifecycle.set()
+        assert archive_committed.wait(timeout=10), "Asset archive did not complete"
+
+    monkeypatch.setattr(links_api, "validate_link_lifecycle_for_mutation", pause_after_lifecycle_check)
+
+    def update_link():
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{beneficiary['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY",
+                    "percentage": "50.00",
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending_update = pool.submit(update_link)
+        try:
+            assert checked_lifecycle.wait(timeout=10), "Update did not reach lifecycle validation"
+            with TestClient(app) as archive_client:
+                archived = archive_client.post(
+                    f"/assets/{asset['id']}/archive",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            assert archived.status_code == 200
+            assert archived.json()["status"] == ASSET_STATUS_ARCHIVED
+        finally:
+            archive_committed.set()
+        updated = pending_update.result(timeout=20)
+
+    assert updated.status_code == 400
+    assert "Archived assets" in updated.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        stored = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.beneficiary_id == beneficiary["id"],
+        ).one()
+        assert Decimal(str(stored.percentage)) == Decimal("30.00")
+    finally:
+        db.close()
