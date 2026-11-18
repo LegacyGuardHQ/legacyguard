@@ -112,5 +112,10 @@ def validate_asset_allocation_change(
     if db.get_bind().dialect.name == "postgresql":
         db.query(Asset.id).filter(Asset.id == asset_id).with_for_update().one()
 
-    links = db.query(AssetBeneficiary).filter(AssetBeneficiary.asset_id == asset_id).all()
+    # Refresh already-loaded link instances after waiting for the PostgreSQL
+    # asset lock; otherwise the session identity map can retain pre-lock values.
+    links_query = db.query(AssetBeneficiary).filter(AssetBeneficiary.asset_id == asset_id)
+    if db.get_bind().dialect.name == "postgresql":
+        links_query = links_query.populate_existing()
+    links = links_query.all()
     return validate_active_role_total(links, role, proposed_link_id=link_id, proposed_percentage=percentage)
