@@ -661,3 +661,70 @@ def test_concurrent_reactivation_and_update_are_serialized_on_postgres(monkeypat
     )
     assert (first_response.status_code, second_response.status_code) == (201, 422)
     _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+def test_concurrent_updates_same_link_refresh_locked_state_on_postgres(monkeypatch) -> None:
+    """A waiter must observe the first update after obtaining the asset lock."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    from app.api import asset_beneficiaries as links_api
+
+    token = _token("same-link-race@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "Shared Recipient")
+    created = _post_link(token, asset["id"], beneficiary["id"], percentage="30")
+    assert created.status_code == 201
+    link_id = created.json()["id"]
+
+    first_validated = Event()
+    second_entered = Event()
+    original_validate = links_api.validate_asset_allocation_change
+    second_observed_percentage = []
+
+    def coordinated_validate(db, asset_id, role, percentage, *, link_id=None):
+        is_second = first_validated.is_set()
+        if is_second:
+            second_entered.set()
+        result = original_validate(db, asset_id, role, percentage, link_id=link_id)
+        if is_second:
+            # The API loaded this same link before waiting on the parent lock.
+            # The post-lock read must refresh that ORM identity-map instance.
+            second_observed_percentage.append(
+                Decimal(str(db.get(AssetBeneficiary, link_id).percentage))
+            )
+        else:
+            first_validated.set()
+            assert second_entered.wait(timeout=10), "Second update never attempted validation"
+        return result
+
+    monkeypatch.setattr(links_api, "validate_asset_allocation_change", coordinated_validate)
+
+    def update_to(value):
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{beneficiary['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY", "percentage": value,
+                    "priority_order": 1, "transfer_method": "WILL",
+                },
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_future = pool.submit(update_to, "50.00")
+        assert first_validated.wait(timeout=10), "First update never validated"
+        second_future = pool.submit(update_to, "60.00")
+        first_response = first_future.result(timeout=20)
+        second_response = second_future.result(timeout=20)
+
+    assert (first_response.status_code, second_response.status_code) == (200, 200)
+    assert second_observed_percentage == [Decimal("50.00")]
+    db = SessionLocal()
+    try:
+        stored = db.query(AssetBeneficiary).filter(AssetBeneficiary.id == link_id).one()
+        assert Decimal(str(stored.percentage)) == Decimal("60.00")
+    finally:
+        db.close()
+    _assert_active_primary_allocation_total_within_limit(asset["id"])
