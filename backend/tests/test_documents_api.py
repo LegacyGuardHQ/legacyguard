@@ -1174,6 +1174,12 @@ def test_background_discovery_recovers_stale_running_scan_without_duplicate_arti
 
     db = SessionLocal()
     try:
+        # Recovery test uses a stub provider: simulate a previously cleared
+        # document so recovery behavior, not eligibility rejection, is tested.
+        stored_document = db.query(Document).filter(Document.id == document_id).one()
+        stored_document.storage_state = DOCUMENT_STORAGE_STORED
+        stored_document.malware_scan_status = DOCUMENT_SCAN_CLEAN
+        db.commit()
         scan = documents_api.discovery_scan_executor.create_pending(db, user_id=user_id)
         scan_id = scan.id
         scan.status = DISCOVERY_SCAN_STATUS_RUNNING
