@@ -35,7 +35,16 @@ from app.models.discovery_scan_document import (
     DISCOVERY_DOCUMENT_WARNING_UNSUPPORTED_EXTRACTION,
     DiscoveryScanDocument,
 )
-from app.models.document import Document
+from app.models.document import (
+    DOCUMENT_SCAN_CLEAN,
+    DOCUMENT_SCAN_NOT_SCANNED,
+    DOCUMENT_SCAN_PENDING,
+    DOCUMENT_SCAN_SCANNING,
+    DOCUMENT_SCAN_DETECTED,
+    DOCUMENT_SCAN_FAILED,
+    DOCUMENT_STORAGE_STORED,
+    Document,
+)
 from app.models.user import User
 from app.services.audit import log_event
 from app.services.discovery_orchestrator import (
@@ -124,7 +133,14 @@ def _create_user_and_document(user_id: str = "user-1", document_id: str = "doc-1
     db = SessionLocal()
     try:
         user = User(id=user_id, email=f"{user_id}@example.com", password_hash="hash")
-        document = Document(id=document_id, user_id=user_id, document_type="ACCOUNT_STATEMENT", document_name="Statement")
+        document = Document(
+            id=document_id,
+            user_id=user_id,
+            document_type="ACCOUNT_STATEMENT",
+            document_name="Statement",
+            storage_state=DOCUMENT_STORAGE_STORED,
+            malware_scan_status=DOCUMENT_SCAN_CLEAN,
+        )
         db.add_all([user, document])
         db.commit()
         return user.id, document.id
@@ -187,6 +203,57 @@ def test_discovery_text_provider_uses_configured_storage_root(monkeypatch: pytes
     provider = EncryptedDocumentTextProvider()
 
     assert provider.storage.root == configured_root.resolve()
+
+
+
+@pytest.mark.parametrize(
+    "scan_status",
+    [
+        DOCUMENT_SCAN_NOT_SCANNED,
+        DOCUMENT_SCAN_PENDING,
+        DOCUMENT_SCAN_SCANNING,
+        DOCUMENT_SCAN_DETECTED,
+        DOCUMENT_SCAN_FAILED,
+    ],
+)
+def test_injected_text_provider_never_reads_non_clean_document(scan_status: str) -> None:
+    _user_id, document_id = _create_user_and_document()
+    db = SessionLocal()
+    provider = FakeTextProvider()
+    engine = FakeDiscoveryEngine()
+    try:
+        document = db.query(Document).filter(Document.id == document_id).one()
+        document.malware_scan_status = scan_status
+        db.commit()
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=provider,
+            discovery_engine=engine,
+            privacy_service=FakePrivacyService(),
+        )
+        with pytest.raises(DiscoveryOrchestrationError, match="Discovery scan failed"):
+            orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+        assert provider.called is False
+        assert engine.called is False
+        assert db.query(EvidenceFinding).count() == 0
+    finally:
+        db.close()
+
+
+def test_injected_text_provider_runs_for_clean_stored_document() -> None:
+    _user_id, document_id = _create_user_and_document()
+    provider = FakeTextProvider()
+    db = SessionLocal()
+    try:
+        orchestrator = DiscoveryOrchestrator(
+            text_provider=provider,
+            discovery_engine=FakeDiscoveryEngine(),
+            privacy_service=FakePrivacyService(),
+        )
+        result = orchestrator.run_scan(db, user_id="user-1", document_ids=[document_id])
+        assert result.status == DISCOVERY_SCAN_STATUS_COMPLETE
+        assert provider.called is True
+    finally:
+        db.close()
 
 
 def test_orchestrator_creates_discovery_scan() -> None:
