@@ -778,3 +778,48 @@ def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monk
     finally:
         db.close()
     _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+@pytest.mark.parametrize("role", ["PRIMARY", "INFORMATIONAL"])
+def test_concurrent_creation_of_same_new_link_returns_conflict_on_postgres(monkeypatch, role: str) -> None:
+    """A losing same-pair create request must respond 409, not raise IntegrityError."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    token = _token(f"new-link-race-{role.lower()}@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "New Recipient")
+
+    def create_link(percentage: str):
+        with TestClient(app) as worker:
+            return worker.post(
+                f"/assets/{asset['id']}/beneficiaries",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_id": beneficiary["id"],
+                    "beneficiary_role": role,
+                    "percentage": percentage,
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    first, second = _exercise_two_competing_postgres_mutations(
+        monkeypatch,
+        lambda: create_link("40.00"),
+        lambda: create_link("50.00"),
+    )
+    assert (first.status_code, second.status_code) == (201, 409)
+    db = SessionLocal()
+    try:
+        links = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.beneficiary_id == beneficiary["id"],
+        ).all()
+        assert len(links) == 1
+        assert links[0].is_active is True
+        assert Decimal(str(links[0].percentage)) == Decimal("40.00")
+    finally:
+        db.close()
+    _assert_active_primary_allocation_total_within_limit(asset["id"])
