@@ -347,6 +347,15 @@ class DiscoveryOrchestrator:
                 db.refresh(tracking)
 
                 try:
+                    # Enforce eligibility at the orchestration boundary even when
+                    # a custom text provider is injected (e.g., tests or plugins).
+                    if (
+                        document.storage_state != DOCUMENT_STORAGE_STORED
+                        or document.malware_scan_status != DOCUMENT_SCAN_CLEAN
+                    ):
+                        raise DiscoveryOrchestrationError(
+                            "Document content is not in an eligible storage state"
+                        )
                     extracted_result = self.text_provider.get_text(document)
                     document_text = str(extracted_result)
                     document_warnings = list(getattr(extracted_result, "warnings", []) or [])
