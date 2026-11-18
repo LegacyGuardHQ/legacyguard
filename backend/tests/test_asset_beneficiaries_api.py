@@ -730,7 +730,8 @@ def test_concurrent_updates_same_link_refresh_locked_state_on_postgres(monkeypat
     _assert_active_primary_allocation_total_within_limit(asset["id"])
 
 
-def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monkeypatch) -> None:
+@pytest.mark.parametrize("role", ["PRIMARY", "INFORMATIONAL"])
+def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monkeypatch, role: str) -> None:
     """Two requests must not both reactivate the same inactive link."""
     from app.database.connection import engine
     if engine.dialect.name != "postgresql":
@@ -739,7 +740,7 @@ def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monk
     token = _token("same-reactivation-race@example.com")
     asset = _create_asset(token)
     beneficiary = _create_beneficiary(token, "Reactivated Recipient")
-    created = _post_link(token, asset["id"], beneficiary["id"], percentage="25")
+    created = _post_link(token, asset["id"], beneficiary["id"], percentage="25", beneficiary_role=role)
     assert created.status_code == 201
     assert _deactivate_link(token, asset["id"], beneficiary["id"]).status_code == 200
     link_id = created.json()["id"]
@@ -751,7 +752,7 @@ def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monk
                 headers={"Authorization": f"Bearer {token}"},
                 json={
                     "beneficiary_id": beneficiary["id"],
-                    "beneficiary_role": "PRIMARY",
+                    "beneficiary_role": role,
                     "percentage": percentage,
                     "priority_order": 1,
                     "transfer_method": "WILL",
