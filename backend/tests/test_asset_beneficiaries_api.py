@@ -1,4 +1,10 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
+from threading import Event
+from time import monotonic, sleep
+
+from sqlalchemy import text
 
 import pytest
 from fastapi.testclient import TestClient
@@ -463,3 +469,506 @@ def test_relinking_reactivates_existing_inactive_link() -> None:
     assert payload["id"] == original.json()["id"]
     assert payload["beneficiary_role"] == "SUCCESSOR"
     assert payload["percentage"] == "45.00"
+
+
+def test_simultaneous_primary_allocations_cannot_exceed_100_on_postgres(monkeypatch) -> None:
+    """Concurrent API requests must not both accept allocations totaling 120%."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL row-locking and separate concurrent transactions")
+
+    token = _token("concurrent-allocations@example.com")
+    asset = _create_asset(token)
+    first = _create_beneficiary(token, "Concurrent First")
+    second = _create_beneficiary(token, "Concurrent Second")
+
+    def post_for(beneficiary_id: str):
+        with TestClient(app) as request_client:
+            return request_client.post(
+                f"/assets/{asset['id']}/beneficiaries",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_id": beneficiary_id,
+                    "beneficiary_role": "PRIMARY",
+                    "percentage": "60.00",
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    first_response, second_response = _exercise_two_competing_postgres_mutations(
+        monkeypatch,
+        lambda: post_for(first["id"]),
+        lambda: post_for(second["id"]),
+    )
+    assert sorted([first_response.status_code, second_response.status_code]) == [201, 422]
+    db = SessionLocal()
+    try:
+        links = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.is_active.is_(True),
+            AssetBeneficiary.beneficiary_role == "PRIMARY",
+        ).all()
+        assert sum((Decimal(str(link.percentage)) for link in links), Decimal("0")) <= Decimal("100")
+    finally:
+        db.close()
+
+
+def _exercise_two_competing_postgres_mutations(monkeypatch, first_request, second_request):
+    """Prove the second PostgreSQL transaction blocks on the first asset lock."""
+    from app.api import asset_beneficiaries as links_api
+
+    first_validated = Event()
+    second_entered_validation = Event()
+    second_backend_pid = []
+    original_validate = links_api.validate_asset_allocation_change
+
+    def coordinated_validate(db, asset_id, role, percentage, **kwargs):
+        is_second = first_validated.is_set()
+        if is_second:
+            # Capture the actual backend, not merely the second Python thread.
+            second_backend_pid.append(db.execute(text("SELECT pg_backend_pid()")).scalar_one())
+            second_entered_validation.set()
+        result = original_validate(db, asset_id, role, percentage, **kwargs)
+        if not is_second:
+            first_validated.set()
+            assert second_entered_validation.wait(timeout=10), (
+                "Second request did not reach allocation validation"
+            )
+            holder_pid = db.execute(text("SELECT pg_backend_pid()")).scalar_one()
+            deadline = monotonic() + 10
+            while monotonic() < deadline:
+                blockers = db.execute(
+                    text("SELECT pg_blocking_pids(:waiter_pid)"),
+                    {"waiter_pid": second_backend_pid[0]},
+                ).scalar_one()
+                if holder_pid in blockers:
+                    break
+                sleep(0.05)
+            else:
+                pytest.fail(
+                    "Second PostgreSQL backend never blocked on the first "
+                    "backend's asset-row lock"
+                )
+        return result
+
+    monkeypatch.setattr(links_api, "validate_asset_allocation_change", coordinated_validate)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_future = pool.submit(first_request)
+        assert first_validated.wait(timeout=10), "First request did not validate"
+        second_future = pool.submit(second_request)
+        first_response = first_future.result(timeout=25)
+        second_response = second_future.result(timeout=25)
+    return first_response, second_response
+
+def _assert_active_primary_allocation_total_within_limit(asset_id: str) -> None:
+    db = SessionLocal()
+    try:
+        links = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset_id,
+            AssetBeneficiary.is_active.is_(True),
+            AssetBeneficiary.beneficiary_role == "PRIMARY",
+        ).all()
+        total = sum((Decimal(str(link.percentage)) for link in links), Decimal("0"))
+        assert total <= Decimal("100")
+    finally:
+        db.close()
+
+
+def test_concurrent_existing_allocation_updates_are_serialized_on_postgres(monkeypatch) -> None:
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    token = _token("update-race@example.com")
+    asset = _create_asset(token)
+    first = _create_beneficiary(token, "First Update")
+    second = _create_beneficiary(token, "Second Update")
+    assert _post_link(token, asset["id"], first["id"], percentage="30").status_code == 201
+    assert _post_link(token, asset["id"], second["id"], percentage="30").status_code == 201
+
+    def update_first():
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{first['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY", "percentage": "70.00",
+                    "priority_order": 1, "transfer_method": "WILL",
+                },
+            )
+
+    def update_second():
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{second['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY", "percentage": "70.00",
+                    "priority_order": 1, "transfer_method": "WILL",
+                },
+            )
+
+    first_response, second_response = _exercise_two_competing_postgres_mutations(
+        monkeypatch, update_first, update_second
+    )
+    assert (first_response.status_code, second_response.status_code) == (200, 422)
+    _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+def test_concurrent_reactivation_and_update_are_serialized_on_postgres(monkeypatch) -> None:
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    token = _token("reactivation-race@example.com")
+    asset = _create_asset(token)
+    inactive = _create_beneficiary(token, "Inactive Recipient")
+    active = _create_beneficiary(token, "Active Recipient")
+    assert _post_link(token, asset["id"], inactive["id"], percentage="60").status_code == 201
+    assert _deactivate_link(token, asset["id"], inactive["id"]).status_code == 200
+    assert _post_link(token, asset["id"], active["id"], percentage="30").status_code == 201
+
+    def reactivate_first():
+        with TestClient(app) as worker:
+            return worker.post(
+                f"/assets/{asset['id']}/beneficiaries",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_id": inactive["id"], "beneficiary_role": "PRIMARY",
+                    "percentage": "60.00", "priority_order": 1, "transfer_method": "WILL",
+                },
+            )
+
+    def update_second():
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{active['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY", "percentage": "50.00",
+                    "priority_order": 1, "transfer_method": "WILL",
+                },
+            )
+
+    first_response, second_response = _exercise_two_competing_postgres_mutations(
+        monkeypatch, reactivate_first, update_second
+    )
+    assert (first_response.status_code, second_response.status_code) == (201, 422)
+    _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+def test_concurrent_updates_same_link_refresh_locked_state_on_postgres(monkeypatch) -> None:
+    """A waiter must observe the first update after obtaining the asset lock."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    from app.api import asset_beneficiaries as links_api
+
+    token = _token("same-link-race@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "Shared Recipient")
+    created = _post_link(token, asset["id"], beneficiary["id"], percentage="30")
+    assert created.status_code == 201
+    link_id = created.json()["id"]
+
+    first_validated = Event()
+    second_entered = Event()
+    original_validate = links_api.validate_asset_allocation_change
+    second_observed_percentage = []
+
+    def coordinated_validate(db, asset_id, role, percentage, *, link_id=None, **kwargs):
+        is_second = first_validated.is_set()
+        if is_second:
+            second_entered.set()
+        result = original_validate(db, asset_id, role, percentage, link_id=link_id, **kwargs)
+        if is_second:
+            # The API loaded this same link before waiting on the parent lock.
+            # The post-lock read must refresh that ORM identity-map instance.
+            second_observed_percentage.append(
+                Decimal(str(db.get(AssetBeneficiary, link_id).percentage))
+            )
+        else:
+            first_validated.set()
+            assert second_entered.wait(timeout=10), "Second update never attempted validation"
+        return result
+
+    monkeypatch.setattr(links_api, "validate_asset_allocation_change", coordinated_validate)
+
+    def update_to(value):
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{beneficiary['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY", "percentage": value,
+                    "priority_order": 1, "transfer_method": "WILL",
+                },
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_future = pool.submit(update_to, "50.00")
+        assert first_validated.wait(timeout=10), "First update never validated"
+        second_future = pool.submit(update_to, "60.00")
+        first_response = first_future.result(timeout=20)
+        second_response = second_future.result(timeout=20)
+
+    assert (first_response.status_code, second_response.status_code) == (200, 200)
+    assert second_observed_percentage == [Decimal("50.00")]
+    db = SessionLocal()
+    try:
+        stored = db.query(AssetBeneficiary).filter(AssetBeneficiary.id == link_id).one()
+        assert Decimal(str(stored.percentage)) == Decimal("60.00")
+    finally:
+        db.close()
+    _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+@pytest.mark.parametrize("role,first_pct,second_pct", [
+    ("PRIMARY", "40.00", "50.00"),
+    ("PRIMARY", "60.00", "60.00"),
+    ("INFORMATIONAL", "40.00", "50.00"),
+])
+def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(
+    monkeypatch, role: str, first_pct: str, second_pct: str
+) -> None:
+    """Two requests must not both reactivate the same inactive link."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    token = _token("same-reactivation-race@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "Reactivated Recipient")
+    created = _post_link(token, asset["id"], beneficiary["id"], percentage="25", beneficiary_role=role)
+    assert created.status_code == 201
+    assert _deactivate_link(token, asset["id"], beneficiary["id"]).status_code == 200
+    link_id = created.json()["id"]
+
+    def reactivate(percentage):
+        with TestClient(app) as worker:
+            return worker.post(
+                f"/assets/{asset['id']}/beneficiaries",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_id": beneficiary["id"],
+                    "beneficiary_role": role,
+                    "percentage": percentage,
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    first, second = _exercise_two_competing_postgres_mutations(
+        monkeypatch,
+        lambda: reactivate(first_pct),
+        lambda: reactivate(second_pct),
+    )
+    assert (first.status_code, second.status_code) == (201, 409)
+    db = SessionLocal()
+    try:
+        links = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.beneficiary_id == beneficiary["id"],
+        ).all()
+        assert len(links) == 1
+        assert links[0].id == link_id
+        assert links[0].is_active is True
+        assert Decimal(str(links[0].percentage)) == Decimal(first_pct)
+    finally:
+        db.close()
+    _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+@pytest.mark.parametrize("role,first_pct,second_pct", [
+    ("PRIMARY", "40.00", "50.00"),
+    ("PRIMARY", "60.00", "60.00"),
+    ("INFORMATIONAL", "40.00", "50.00"),
+])
+def test_concurrent_creation_of_same_new_link_returns_conflict_on_postgres(
+    monkeypatch, role: str, first_pct: str, second_pct: str
+) -> None:
+    """A losing same-pair create request must respond 409, not raise IntegrityError."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    token = _token(f"new-link-race-{role.lower()}@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "New Recipient")
+
+    def create_link(percentage: str):
+        with TestClient(app) as worker:
+            return worker.post(
+                f"/assets/{asset['id']}/beneficiaries",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_id": beneficiary["id"],
+                    "beneficiary_role": role,
+                    "percentage": percentage,
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    first, second = _exercise_two_competing_postgres_mutations(
+        monkeypatch,
+        lambda: create_link(first_pct),
+        lambda: create_link(second_pct),
+    )
+    assert (first.status_code, second.status_code) == (201, 409)
+    db = SessionLocal()
+    try:
+        links = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.beneficiary_id == beneficiary["id"],
+        ).all()
+        assert len(links) == 1
+        assert links[0].is_active is True
+        assert Decimal(str(links[0].percentage)) == Decimal(first_pct)
+    finally:
+        db.close()
+    _assert_active_primary_allocation_total_within_limit(asset["id"])
+
+
+def test_asset_archived_during_link_update_is_rejected_on_postgres(monkeypatch) -> None:
+    """An archive committed after the initial lifecycle check must block the update."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    from app.api import asset_beneficiaries as links_api
+
+    token = _token("concurrent-asset-archive@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "Archive Race Recipient")
+    assert _post_link(token, asset["id"], beneficiary["id"], percentage="30").status_code == 201
+
+    checked_lifecycle = Event()
+    archive_committed = Event()
+    original_check = links_api.validate_link_lifecycle_for_mutation
+
+    def pause_after_lifecycle_check(asset_obj, beneficiary_obj):
+        original_check(asset_obj, beneficiary_obj)
+        checked_lifecycle.set()
+        assert archive_committed.wait(timeout=10), "Asset archive did not complete"
+
+    monkeypatch.setattr(links_api, "validate_link_lifecycle_for_mutation", pause_after_lifecycle_check)
+
+    def update_link():
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{beneficiary['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY",
+                    "percentage": "50.00",
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending_update = pool.submit(update_link)
+        try:
+            assert checked_lifecycle.wait(timeout=10), "Update did not reach lifecycle validation"
+            with TestClient(app) as archive_client:
+                archived = archive_client.post(
+                    f"/assets/{asset['id']}/archive",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            assert archived.status_code == 200
+            assert archived.json()["status"] == ASSET_STATUS_ARCHIVED
+        finally:
+            archive_committed.set()
+        updated = pending_update.result(timeout=20)
+
+    assert updated.status_code == 400
+    assert "Archived assets" in updated.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        stored = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.beneficiary_id == beneficiary["id"],
+        ).one()
+        assert Decimal(str(stored.percentage)) == Decimal("30.00")
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("lifecycle_action", ["archive", "mark-deceased"])
+def test_beneficiary_lifecycle_change_during_link_update_is_rejected_on_postgres(
+    monkeypatch, lifecycle_action: str
+) -> None:
+    """A beneficiary lifecycle change between link checks must prohibit mutation."""
+    from app.database.connection import engine
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires PostgreSQL concurrent transactions")
+
+    from app.api import asset_beneficiaries as links_api
+
+    token = _token(f"beneficiary-lifecycle-race-{lifecycle_action}@example.com")
+    asset = _create_asset(token)
+    beneficiary = _create_beneficiary(token, "Concurrent Lifecycle Recipient")
+    assert _post_link(token, asset["id"], beneficiary["id"], percentage="30").status_code == 201
+
+    checked_lifecycle = Event()
+    lifecycle_committed = Event()
+    original_check = links_api.validate_link_lifecycle_for_mutation
+    reached_checks = []
+
+    def pause_after_first_lifecycle_check(asset_obj, beneficiary_obj):
+        original_check(asset_obj, beneficiary_obj)
+        reached_checks.append(True)
+        if len(reached_checks) == 1:
+            checked_lifecycle.set()
+            assert lifecycle_committed.wait(timeout=10), "Beneficiary lifecycle change did not complete"
+
+    monkeypatch.setattr(links_api, "validate_link_lifecycle_for_mutation", pause_after_first_lifecycle_check)
+
+    def update_link():
+        with TestClient(app) as worker:
+            return worker.put(
+                f"/assets/{asset['id']}/beneficiaries/{beneficiary['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "beneficiary_role": "PRIMARY",
+                    "percentage": "50.00",
+                    "priority_order": 1,
+                    "transfer_method": "WILL",
+                },
+            )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending_update = pool.submit(update_link)
+        try:
+            assert checked_lifecycle.wait(timeout=10), "Link update did not reach lifecycle validation"
+            with TestClient(app) as lifecycle_client:
+                changed = lifecycle_client.post(
+                    f"/beneficiaries/{beneficiary['id']}/{lifecycle_action}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            assert changed.status_code == 200
+            if lifecycle_action == "archive":
+                assert changed.json()["status"] == BENEFICIARY_STATUS_ARCHIVED
+            else:
+                assert changed.json()["is_deceased"] is True
+        finally:
+            lifecycle_committed.set()
+        updated = pending_update.result(timeout=20)
+
+    assert updated.status_code == 400
+    assert ("Archived beneficiaries" if lifecycle_action == "archive" else "Deceased beneficiaries") in updated.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        stored = db.query(AssetBeneficiary).filter(
+            AssetBeneficiary.asset_id == asset["id"],
+            AssetBeneficiary.beneficiary_id == beneficiary["id"],
+        ).one()
+        assert Decimal(str(stored.percentage)) == Decimal("30.00")
+    finally:
+        db.close()

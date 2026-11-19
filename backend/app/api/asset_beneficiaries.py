@@ -20,7 +20,7 @@ from app.services.asset_beneficiary_links import (
     get_owned_asset_for_linking,
     validate_link_lifecycle_for_mutation,
 )
-from app.services.beneficiary_allocations import AllocationValidationError, validate_asset_allocation_change
+from app.services.beneficiary_allocations import AllocationValidationError, DuplicateActiveLinkError, validate_asset_allocation_change
 
 router = APIRouter(prefix="/assets", tags=["asset-beneficiaries"])
 
@@ -82,9 +82,37 @@ def create_asset_beneficiary_link(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active asset-beneficiary link already exists")
 
     try:
-        validate_asset_allocation_change(db, asset_id, payload.beneficiary_role, payload.percentage)
+        validate_asset_allocation_change(
+            db, asset_id, payload.beneficiary_role, payload.percentage,
+            conflicting_beneficiary_id=payload.beneficiary_id,
+        )
+    except DuplicateActiveLinkError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except AllocationValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    # Lock and refresh the lifecycle rows after allocation validation has
+    # locked the parent asset. Hold both locks through commit so concurrent
+    # archival/deceased-status changes cannot invalidate the final check.
+    if db.get_bind().dialect.name == "postgresql":
+        db.refresh(asset)
+        db.refresh(beneficiary, with_for_update=True)
+        validate_link_lifecycle_for_mutation(asset, beneficiary)
+
+    # The first pre-lock lookup may have found no link. Check again after
+    # serialized validation because a competing request could have inserted it
+    # while this transaction waited for the parent asset lock.
+    existing = (
+        db.query(AssetBeneficiary)
+        .filter(
+            AssetBeneficiary.asset_id == asset_id,
+            AssetBeneficiary.beneficiary_id == payload.beneficiary_id,
+        )
+        .populate_existing()
+        .first()
+    )
+    if existing is not None and existing.is_active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active asset-beneficiary link already exists")
 
     now = datetime.now(timezone.utc)
     if existing is not None:
@@ -160,6 +188,14 @@ def update_asset_beneficiary_link(
         validate_asset_allocation_change(db, asset_id, payload.beneficiary_role, payload.percentage, link_id=link.id)
     except AllocationValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    # Lock and refresh the lifecycle rows after allocation validation has
+    # locked the parent asset. Hold both locks through commit so concurrent
+    # archival/deceased-status changes cannot invalidate the final check.
+    if db.get_bind().dialect.name == "postgresql":
+        db.refresh(asset)
+        db.refresh(beneficiary, with_for_update=True)
+        validate_link_lifecycle_for_mutation(asset, beneficiary)
 
     now = datetime.now(timezone.utc)
     link.beneficiary_role = payload.beneficiary_role
