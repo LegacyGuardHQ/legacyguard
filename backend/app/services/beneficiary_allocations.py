@@ -18,6 +18,10 @@ class AllocationValidationError(ValueError):
     pass
 
 
+class DuplicateActiveLinkError(ValueError):
+    """The requested asset/beneficiary pair is already active."""
+
+
 ALLOCATED_ROLE_VALUES = {
     BENEFICIARY_ROLE_PRIMARY,
     BENEFICIARY_ROLE_CONTINGENT,
@@ -99,6 +103,7 @@ def validate_asset_allocation_change(
     percentage: Decimal | float | int | None,
     *,
     link_id: str | None = None,
+    conflicting_beneficiary_id: str | None = None,
 ) -> AllocationValidationResult:
     validate_beneficiary_role(role)
     validate_individual_percentage(percentage)
@@ -115,6 +120,14 @@ def validate_asset_allocation_change(
     if db.get_bind().dialect.name == "postgresql":
         links_query = links_query.populate_existing()
     links = links_query.all()
+    # Resolve duplicate-link conflicts after the asset lock, but before
+    # computing role totals. A second 60% PRIMARY request must return 409,
+    # not an allocation-total 422.
+    if conflicting_beneficiary_id is not None and any(
+        link.beneficiary_id == conflicting_beneficiary_id and link.is_active
+        for link in links
+    ):
+        raise DuplicateActiveLinkError("Active asset-beneficiary link already exists")
     if role == BENEFICIARY_ROLE_INFORMATIONAL:
         return AllocationValidationResult(role=role, total=Decimal("0"), is_complete=False)
     return validate_active_role_total(links, role, proposed_link_id=link_id, proposed_percentage=percentage)
