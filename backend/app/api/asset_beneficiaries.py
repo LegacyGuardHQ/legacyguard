@@ -20,7 +20,7 @@ from app.services.asset_beneficiary_links import (
     get_owned_asset_for_linking,
     validate_link_lifecycle_for_mutation,
 )
-from app.services.beneficiary_allocations import AllocationValidationError, validate_asset_allocation_change
+from app.services.beneficiary_allocations import AllocationValidationError, DuplicateActiveLinkError, validate_asset_allocation_change
 
 router = APIRouter(prefix="/assets", tags=["asset-beneficiaries"])
 
@@ -82,7 +82,12 @@ def create_asset_beneficiary_link(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active asset-beneficiary link already exists")
 
     try:
-        validate_asset_allocation_change(db, asset_id, payload.beneficiary_role, payload.percentage)
+        validate_asset_allocation_change(
+            db, asset_id, payload.beneficiary_role, payload.percentage,
+            conflicting_beneficiary_id=payload.beneficiary_id,
+        )
+    except DuplicateActiveLinkError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except AllocationValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
