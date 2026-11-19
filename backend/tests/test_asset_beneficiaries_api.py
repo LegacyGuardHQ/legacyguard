@@ -730,8 +730,14 @@ def test_concurrent_updates_same_link_refresh_locked_state_on_postgres(monkeypat
     _assert_active_primary_allocation_total_within_limit(asset["id"])
 
 
-@pytest.mark.parametrize("role", ["PRIMARY", "INFORMATIONAL"])
-def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monkeypatch, role: str) -> None:
+@pytest.mark.parametrize("role,first_pct,second_pct", [
+    ("PRIMARY", "40.00", "50.00"),
+    ("PRIMARY", "60.00", "60.00"),
+    ("INFORMATIONAL", "40.00", "50.00"),
+])
+def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(
+    monkeypatch, role: str, first_pct: str, second_pct: str
+) -> None:
     """Two requests must not both reactivate the same inactive link."""
     from app.database.connection import engine
     if engine.dialect.name != "postgresql":
@@ -761,8 +767,8 @@ def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monk
 
     first, second = _exercise_two_competing_postgres_mutations(
         monkeypatch,
-        lambda: reactivate("40.00"),
-        lambda: reactivate("50.00"),
+        lambda: reactivate(first_pct),
+        lambda: reactivate(second_pct),
     )
     assert (first.status_code, second.status_code) == (201, 409)
     db = SessionLocal()
@@ -774,14 +780,20 @@ def test_concurrent_reactivation_of_same_link_rejects_duplicate_on_postgres(monk
         assert len(links) == 1
         assert links[0].id == link_id
         assert links[0].is_active is True
-        assert Decimal(str(links[0].percentage)) == Decimal("40.00")
+        assert Decimal(str(links[0].percentage)) == Decimal(first_pct)
     finally:
         db.close()
     _assert_active_primary_allocation_total_within_limit(asset["id"])
 
 
-@pytest.mark.parametrize("role", ["PRIMARY", "INFORMATIONAL"])
-def test_concurrent_creation_of_same_new_link_returns_conflict_on_postgres(monkeypatch, role: str) -> None:
+@pytest.mark.parametrize("role,first_pct,second_pct", [
+    ("PRIMARY", "40.00", "50.00"),
+    ("PRIMARY", "60.00", "60.00"),
+    ("INFORMATIONAL", "40.00", "50.00"),
+])
+def test_concurrent_creation_of_same_new_link_returns_conflict_on_postgres(
+    monkeypatch, role: str, first_pct: str, second_pct: str
+) -> None:
     """A losing same-pair create request must respond 409, not raise IntegrityError."""
     from app.database.connection import engine
     if engine.dialect.name != "postgresql":
@@ -807,8 +819,8 @@ def test_concurrent_creation_of_same_new_link_returns_conflict_on_postgres(monke
 
     first, second = _exercise_two_competing_postgres_mutations(
         monkeypatch,
-        lambda: create_link("40.00"),
-        lambda: create_link("50.00"),
+        lambda: create_link(first_pct),
+        lambda: create_link(second_pct),
     )
     assert (first.status_code, second.status_code) == (201, 409)
     db = SessionLocal()
@@ -819,7 +831,7 @@ def test_concurrent_creation_of_same_new_link_returns_conflict_on_postgres(monke
         ).all()
         assert len(links) == 1
         assert links[0].is_active is True
-        assert Decimal(str(links[0].percentage)) == Decimal("40.00")
+        assert Decimal(str(links[0].percentage)) == Decimal(first_pct)
     finally:
         db.close()
     _assert_active_primary_allocation_total_within_limit(asset["id"])
