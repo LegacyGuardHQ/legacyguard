@@ -2,6 +2,9 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from threading import Event
+from time import monotonic, sleep
+
+from sqlalchemy import text
 
 import pytest
 from fastapi.testclient import TestClient
@@ -474,28 +477,10 @@ def test_simultaneous_primary_allocations_cannot_exceed_100_on_postgres(monkeypa
     if engine.dialect.name != "postgresql":
         pytest.skip("Requires PostgreSQL row-locking and separate concurrent transactions")
 
-    from app.api import asset_beneficiaries as links_api
-
     token = _token("concurrent-allocations@example.com")
     asset = _create_asset(token)
     first = _create_beneficiary(token, "Concurrent First")
     second = _create_beneficiary(token, "Concurrent Second")
-
-    first_validated = Event()
-    second_completed = Event()
-    original_validate = links_api.validate_asset_allocation_change
-
-    def coordinated_validate(db, asset_id, role, percentage, *, link_id=None):
-        result = original_validate(db, asset_id, role, percentage, link_id=link_id)
-        if not first_validated.is_set():
-            first_validated.set()
-            # Keep the first request before commit long enough for the other
-            # request to attempt validation. Under a per-asset row lock, that
-            # second request must wait until the first commits.
-            second_completed.wait(timeout=2)
-        return result
-
-    monkeypatch.setattr(links_api, "validate_asset_allocation_change", coordinated_validate)
 
     def post_for(beneficiary_id: str):
         with TestClient(app) as request_client:
@@ -511,16 +496,11 @@ def test_simultaneous_primary_allocations_cannot_exceed_100_on_postgres(monkeypa
                 },
             )
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        first_request = pool.submit(post_for, first["id"])
-        assert first_validated.wait(timeout=10), "First request never reached allocation validation"
-        second_request = pool.submit(post_for, second["id"])
-        try:
-            second_response = second_request.result(timeout=15)
-        finally:
-            second_completed.set()
-        first_response = first_request.result(timeout=15)
-
+    first_response, second_response = _exercise_two_competing_postgres_mutations(
+        monkeypatch,
+        lambda: post_for(first["id"]),
+        lambda: post_for(second["id"]),
+    )
     assert sorted([first_response.status_code, second_response.status_code]) == [201, 422]
     db = SessionLocal()
     try:
@@ -535,24 +515,41 @@ def test_simultaneous_primary_allocations_cannot_exceed_100_on_postgres(monkeypa
 
 
 def _exercise_two_competing_postgres_mutations(monkeypatch, first_request, second_request):
-    """Let the second request reach validation while the first holds its lock."""
+    """Prove the second PostgreSQL transaction blocks on the first asset lock."""
     from app.api import asset_beneficiaries as links_api
 
     first_validated = Event()
     second_entered_validation = Event()
+    second_backend_pid = []
     original_validate = links_api.validate_asset_allocation_change
 
-    def coordinated_validate(db, asset_id, role, percentage, *, link_id=None):
-        # The first request owns the asset lock after successful validation.
-        # The second announces itself before trying to obtain that lock.
-        if first_validated.is_set():
+    def coordinated_validate(db, asset_id, role, percentage, **kwargs):
+        is_second = first_validated.is_set()
+        if is_second:
+            # Capture the actual backend, not merely the second Python thread.
+            second_backend_pid.append(db.execute(text("SELECT pg_backend_pid()")).scalar_one())
             second_entered_validation.set()
-        result = original_validate(db, asset_id, role, percentage, link_id=link_id)
-        if not first_validated.is_set():
+        result = original_validate(db, asset_id, role, percentage, **kwargs)
+        if not is_second:
             first_validated.set()
             assert second_entered_validation.wait(timeout=10), (
                 "Second request did not reach allocation validation"
             )
+            holder_pid = db.execute(text("SELECT pg_backend_pid()")).scalar_one()
+            deadline = monotonic() + 10
+            while monotonic() < deadline:
+                blockers = db.execute(
+                    text("SELECT pg_blocking_pids(:waiter_pid)"),
+                    {"waiter_pid": second_backend_pid[0]},
+                ).scalar_one()
+                if holder_pid in blockers:
+                    break
+                sleep(0.05)
+            else:
+                pytest.fail(
+                    "Second PostgreSQL backend never blocked on the first "
+                    "backend's asset-row lock"
+                )
         return result
 
     monkeypatch.setattr(links_api, "validate_asset_allocation_change", coordinated_validate)
@@ -561,10 +558,9 @@ def _exercise_two_competing_postgres_mutations(monkeypatch, first_request, secon
         first_future = pool.submit(first_request)
         assert first_validated.wait(timeout=10), "First request did not validate"
         second_future = pool.submit(second_request)
-        first_response = first_future.result(timeout=20)
-        second_response = second_future.result(timeout=20)
+        first_response = first_future.result(timeout=25)
+        second_response = second_future.result(timeout=25)
     return first_response, second_response
-
 
 def _assert_active_primary_allocation_total_within_limit(asset_id: str) -> None:
     db = SessionLocal()
@@ -683,11 +679,11 @@ def test_concurrent_updates_same_link_refresh_locked_state_on_postgres(monkeypat
     original_validate = links_api.validate_asset_allocation_change
     second_observed_percentage = []
 
-    def coordinated_validate(db, asset_id, role, percentage, *, link_id=None):
+    def coordinated_validate(db, asset_id, role, percentage, *, link_id=None, **kwargs):
         is_second = first_validated.is_set()
         if is_second:
             second_entered.set()
-        result = original_validate(db, asset_id, role, percentage, link_id=link_id)
+        result = original_validate(db, asset_id, role, percentage, link_id=link_id, **kwargs)
         if is_second:
             # The API loaded this same link before waiting on the parent lock.
             # The post-lock read must refresh that ORM identity-map instance.
